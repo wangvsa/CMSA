@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "util.h"
 #include "center-star.h"
+#include "sp.h"
 using namespace std;
 
 __device__
@@ -12,10 +13,16 @@ void fun(char *result, int num) {
     test(result, num);
 }
 
+// 计算Sum of Pairs
+void calSP(list<string> seqs) {
+    int sp = sumOfPairs(seqs);
+    printf("sp:%d, avg sp: %d\n", sp, sp/seqs.size());
+}
+
 int main() {
     int vec[65536] = {0};
 
-    list<string> sequences = readFastaFile("/home/wangchen/source/CUDA/CUDA-MSA/mt_genome_1x.fasta");
+    list<string> sequences = readFastaFile("/home/wangchen/source/CUDA/CUDA-MSA/test.fasta");
     list<string>::iterator it;
     for(it=sequences.begin();it!=sequences.end();it++) {
         const char *str = (*it).c_str();
@@ -34,7 +41,9 @@ int main() {
         printf("seq: %d, count: %d,\n", i++, count);
     }
 
-    printf("maxIndex: %d, maxCount:%d", maxIndex, maxCount);
+    printf("maxIndex: %d, maxCount:%d\n", maxIndex, maxCount);
+
+    calSP(sequences);
 
     /*
     char *d_result;
@@ -51,3 +60,5 @@ int main() {
     cudaFree(d_result);
     */
 }
+
+
