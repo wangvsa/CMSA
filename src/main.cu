@@ -19,10 +19,10 @@ void calSP(list<string> seqs) {
     printf("sp:%d, avg sp: %d\n", sp, sp/seqs.size());
 }
 
-int main() {
+// 找到中心串
+void findCenterSequence(list<string> sequences) {
     int vec[65536] = {0};
 
-    list<string> sequences = readFastaFile("/home/wangchen/source/CUDA/CUDA-MSA/test.fasta");
     list<string>::iterator it;
     for(it=sequences.begin();it!=sequences.end();it++) {
         const char *str = (*it).c_str();
@@ -30,6 +30,7 @@ int main() {
     }
 
     int i = 1;
+
     int maxIndex = 0, maxCount = 0;
     for(it=sequences.begin();it!=sequences.end();it++) {
         const char *str = (*it).c_str();
@@ -42,6 +43,13 @@ int main() {
     }
 
     printf("maxIndex: %d, maxCount:%d\n", maxIndex, maxCount);
+}
+
+int main() {
+
+    list<string> sequences = readFastaFile("/home/wangchen/source/CUDA/CUDA-MSA/test.fasta");
+
+    findCenterSequence(sequences);
 
     calSP(sequences);
 
