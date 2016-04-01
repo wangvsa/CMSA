@@ -1,8 +1,10 @@
 #ifndef _UTIL_H_
 #define _UTIL_H_
 #include <string>
-#include <list>
+#include <vector>
 
-std::list<std::string> readFastaFile(const char *path);
+std::vector<std::string> readFastaFile(const char *path);
+
+void writeFastaFile(const char *path, std::vector<std::string> strs);
 
 #endif

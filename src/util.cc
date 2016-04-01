@@ -3,8 +3,8 @@
 #include <assert.h>
 using namespace std;
 
-list<string> readFastaFile(const char *path) {
-    list<string> sequences;
+vector<string> readFastaFile(const char *path) {
+    vector<string> sequences;
     string buff;
 
     ifstream file;
@@ -17,6 +17,19 @@ list<string> readFastaFile(const char *path) {
         sequences.push_back(buff);
     }
 
+    file.close();
     return sequences;
 }
 
+
+void writeFastaFile(const char* path, vector<string> strs) {
+    ofstream file(path);
+    if(file.is_open()) {
+        for(int i=0;i<strs.size();i++) {
+            file<<">"<<i<<endl;
+            file<<strs[i]<<endl;
+        }
+    }
+
+    file.close();
+}

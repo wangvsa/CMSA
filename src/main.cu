@@ -47,11 +47,11 @@ void findCenterSequence(list<string> sequences) {
 
 int main() {
 
-    list<string> sequences = readFastaFile("/home/wangchen/source/CUDA/CUDA-MSA/test.fasta");
+    list<string> sequences = readFastaFile("/home/wangchen/source/CUDA/CUDA-MSA/mt_genome_1x.fasta");
 
     findCenterSequence(sequences);
 
-    calSP(sequences);
+    //calSP(sequences);
 
     /*
     char *d_result;
