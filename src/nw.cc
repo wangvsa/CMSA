@@ -151,14 +151,14 @@ void output() {
     }
 
     // 将结果写入文件
-    writeFastaFile("/home/hadoop/source/CUDA-MSA/src/output.fasta", allAlignedStrs);
+    writeFastaFile("/home/wangchen/source/CUDA/CUDA-MSA/src/output.fasta", allAlignedStrs);
 }
 
 void init() {
     // 读入所有字符串
     // centerSeq, 图中的纵向，决定了行数m
     // seqs[idx], 图中的横向，决定了列数n
-    seqs = readFastaFile("/home/hadoop/source/CUDA-MSA/test.fasta");
+    seqs = readFastaFile("/home/wangchen/source/CUDA/CUDA-MSA/test2.fasta");
     centerSeq = seqs[0];
     seqs.erase(seqs.begin());
 

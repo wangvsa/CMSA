@@ -50,7 +50,7 @@ int cuda_strlen(char *str) {
   * matrix          out, 需要计算的DP矩阵
   */
 __device__
-void cuda_nw(int m, int n, char *centerSeq, char *seq, uint8_t *matrix, int maxLength) {
+void cuda_nw(int m, int n, char *centerSeq, char *seq, short *matrix, int maxLength) {
 
     int width = maxLength + 1;
 
@@ -80,7 +80,7 @@ void cuda_nw(int m, int n, char *centerSeq, char *seq, uint8_t *matrix, int maxL
   * spaceForOther   out, 需要计算的本次匹配给当前串引入的空格
   */
 __device__
-void cuda_backtrack(int m, int n, int seqIdx, uint8_t *matrix, short *spaceRow, short *spaceForOtherRow, int maxLength) {
+void cuda_backtrack(int m, int n, int seqIdx, short *matrix, short *spaceRow, short *spaceForOtherRow, int maxLength) {
 
     int width = maxLength + 1;
 
@@ -105,13 +105,13 @@ void cuda_backtrack(int m, int n, int seqIdx, uint8_t *matrix, short *spaceRow, 
 
 
 __global__
-void cuda_msa(int startIdx, char *centerSeq, char *seqs, uint8_t *matrix, short *space, short *spaceForOther, size_t pitch, int maxLength, int totalSequences) {
+void cuda_msa(int startIdx, char *centerSeq, char *seqs, short *matrix, short *space, short *spaceForOther, size_t pitch, int maxLength, int totalSequences) {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     int seqIdx = tid + startIdx;
     if(seqIdx >= totalSequences)
         return;
 
-    uint8_t *matrixRow = (uint8_t*)((char*)matrix + tid * pitch);
+    short *matrixRow = (short*)((char*)matrix + tid * pitch);
     char *seq = seqs + (maxLength+1) * seqIdx;
 
     int m = cuda_strlen(centerSeq);
@@ -170,8 +170,9 @@ void output(short *space, short *spaceForOther) {
         // 再插入其他串比对时引入的空格
         for(int pos = 0; pos < spaceForCenter.size(); pos++) {
             int num = spaceForCenter[pos] - space[idx*sWidth+pos];
-            if(num > 0)
+            if(num > 0) {
                 alignedStr.insert(pos+shift, num, '-');
+            }
             shift += spaceForCenter[pos];
         }
         //printf("%s\n", alignedStr.c_str());
@@ -180,7 +181,7 @@ void output(short *space, short *spaceForOther) {
 
     // 将结果写入文件
     printf("write to the output file.\n");
-    writeFastaFile("/home/hadoop/source/CUDA-MSA/src/output2.fasta", allAlignedStrs);
+    writeFastaFile("/home/wangchen/source/CUDA/CUDA-MSA/src/output2.fasta", allAlignedStrs);
 }
 
 
@@ -236,16 +237,19 @@ void msa(int BLOCKS, int THREADS) {
     cudaMalloc((void**)&d_spaceForOther, h*soWidth*sizeof(short));
 
     // 每条串的DP矩阵是一行
-    uint8_t *d_matrix;
+    short *d_matrix;
     size_t pitch;
-    cudaMallocPitch((void**)&d_matrix, &pitch, soWidth*sWidth*sizeof(uint8_t), h);
+    cudaMallocPitch((void**)&d_matrix, &pitch, soWidth*sWidth*sizeof(short), h);
 
+
+    clock_t start, end;
+    start = clock();
     for(int i = 0; i <= seqs.size() / SEQUENCES_PER_KERNEL; i++) {
         if(i==seqs.size()/SEQUENCES_PER_KERNEL)
             h = seqs.size() % SEQUENCES_PER_KERNEL;
 
         // 此次kernel计算的起始串的位置
-        int startIdx = i * h;
+        int startIdx = i * SEQUENCES_PER_KERNEL;
         printf("%d. startIdx: %d, h: %d\n", i, startIdx, h);
 
         cudaMemset(d_space, 0, h*sWidth*sizeof(short));
@@ -254,8 +258,13 @@ void msa(int BLOCKS, int THREADS) {
         cudaMemcpy(space+startIdx*sWidth, d_space, h*sWidth*sizeof(short), cudaMemcpyDeviceToHost);
         cudaMemcpy(spaceForOther+startIdx*soWidth, d_spaceForOther, h*soWidth*sizeof(short), cudaMemcpyDeviceToHost);
     }
+    end = clock();
+    printf("DP calculation time: %f\n", (double)(end-start)/CLOCKS_PER_SEC);
 
-    //output(space, spaceForOther);
+    start = clock();
+    output(space, spaceForOther);
+    end = clock();
+    printf("output time: %f\n", (double)(end-start)/CLOCKS_PER_SEC);
 
     cudaFree(d_space);
     cudaFree(d_spaceForOther);
@@ -271,7 +280,7 @@ void msa(int BLOCKS, int THREADS) {
 int main(int argc, char *argv[]) {
     assert(argc>=2);
     init(argv[1]);
-    int BLOCKS = 4;
+    int BLOCKS = 6;
     int THREADS = 128;
     msa(BLOCKS, THREADS);
 }
