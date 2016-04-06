@@ -11,7 +11,10 @@ using namespace std;
 #define MATCH 0
 #define GAP -1
 
-int maxLength;
+int maxLength;          // 所有串的最大长度
+int minLength;          // 所有串的最短长度
+int avgLength;          // 所有串的平均长度
+
 string centerSeq;
 vector<string> seqs;
 char *c_seqs;
@@ -42,6 +45,7 @@ int cuda_strlen(char *str) {
         count++;
     return count;
 }
+
 
 /**
   * centerSeq       in, 中心串
@@ -125,7 +129,7 @@ void cuda_msa(int startIdx, char *centerSeq, char *seqs, short *matrix, short *s
     //printf("seqIdx: %d, m: %d, n: %d\n", seqIdx, m, n);
 
     cuda_nw(m, n, centerSeq, seq, matrixRow, maxLength);
-    cuda_backtrack(m, n, tid, matrixRow, spaceRow, spaceForOtherRow, maxLength);
+    //cuda_backtrack(m, n, tid, matrixRow, spaceRow, spaceForOtherRow, maxLength);
 
     //printMatrix(spaceForOtherRow, 1, n+1);
 }
@@ -193,11 +197,18 @@ void init(char *path) {
     centerSeq = seqs[0];
     seqs.erase(seqs.begin());
 
-    maxLength = centerSeq.size();
-    for(int i=0;i<seqs.size();i++)
+    unsigned long sumLength = 0;
+    maxLength = 0, minLength = INT_MAX;
+    for(int i=0;i<seqs.size();i++) {
+        sumLength += seqs[i].size();
         if( maxLength < seqs[i].size())
             maxLength = seqs[i].size();
-    printf("max length: %d\n", maxLength);
+        if( minLength > seqs[i].size())
+            minLength = seqs[i].size();
+    }
+    avgLength = sumLength / seqs.size();
+    printf("sequences size: %d\n", seqs.size());
+    printf("max length: %d, min length: %d, avg length: %d\n", maxLength, minLength, avgLength);
 
     c_seqs = new char[(maxLength+1) * seqs.size()];
     for(int i=0;i<seqs.size();i++) {
@@ -262,7 +273,7 @@ void msa(int BLOCKS, int THREADS) {
     printf("DP calculation time: %f\n", (double)(end-start)/CLOCKS_PER_SEC);
 
     start = clock();
-    output(space, spaceForOther);
+    //output(space, spaceForOther);
     end = clock();
     printf("output time: %f\n", (double)(end-start)/CLOCKS_PER_SEC);
 
