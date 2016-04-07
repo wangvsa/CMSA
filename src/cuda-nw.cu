@@ -96,7 +96,7 @@ void cuda_backtrack(int m, int n, int seqIdx, short *matrix, short *spaceRow, sh
 
 
 __global__
-void cuda_msa(int startIdx, char *centerSeq, char *seqs, short *matrix, short *space, short *spaceForOther, size_t pitch, int maxLength, int totalSequences) {
+void cuda_msa(int startIdx, char *centerSeq, char *seqs, short *matrix, short *space, short *spaceForOther, size_t pitch, int maxLength, int totalSequences, int THRESHOLD) {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     int seqIdx = tid + startIdx;
     if(seqIdx >= totalSequences)
@@ -129,6 +129,7 @@ void cuda_msa(int startIdx, char *centerSeq, char *seqs, short *matrix, short *s
 
 
 void msa(int BLOCKS, int THREADS, int maxLength, int height, string centerSeq, vector<string> seqs, short *space, short *spaceForOther) {
+    if(height <= 0) return;
 
     int sWidth = centerSeq.size() + 1;      // d_space的宽度
     int soWidth = maxLength + 1;            // d_spaceForOther的宽度
@@ -178,7 +179,7 @@ void msa(int BLOCKS, int THREADS, int maxLength, int height, string centerSeq, v
 
         cudaMemset(d_space, 0, h*sWidth*sizeof(short));
         cudaMemset(d_spaceForOther, 0, h*soWidth*sizeof(short));
-        cuda_msa<<<BLOCKS, THREADS>>>(startIdx, d_centerSeq, d_seqs, d_matrix, d_space, d_spaceForOther, pitch, maxLength, height);
+        cuda_msa<<<BLOCKS, THREADS>>>(startIdx, d_centerSeq, d_seqs, d_matrix, d_space, d_spaceForOther, pitch, maxLength, height, THRESHOLD);
         cudaMemcpy(space+startIdx*sWidth, d_space, h*sWidth*sizeof(short), cudaMemcpyDeviceToHost);
         cudaMemcpy(spaceForOther+startIdx*soWidth, d_spaceForOther, h*soWidth*sizeof(short), cudaMemcpyDeviceToHost);
     }

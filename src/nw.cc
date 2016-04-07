@@ -84,6 +84,8 @@ void backtrack(Matrix matrix, string centerSeq, vector<string> seqs, int seqIdx,
 
 void cpu_msa(string centerSeq, vector<string> seqs, int startIdx, short *space, short *spaceForOther, int maxLength) {
 
+    if(startIdx >= seqs.size()) return;
+
     double start, end;
 
     // 计算DP矩阵, 执行backtrack

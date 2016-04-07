@@ -1,11 +1,11 @@
 #include <stdio.h>
-#include <assert.h>
 #include "util.h"
 #include "sp.h"
 #include "center-star.h"
 #include "cuda-nw.h"
 #include "nw.h"
 #include "omp.h"
+#include "global.h"
 using namespace std;
 
 
@@ -104,11 +104,15 @@ void output(short *space, short *spaceForOther, const char* path) {
     writeFastaFile(path, allAlignedStrs);
 }
 
+
 int main(int argc, char *argv[]) {
 
-    assert(argc>=3);
-    const char *inputPath = argv[1];
-    const char *outputPath = argv[2];
+    int argvIdx = parseOptions(argc, argv);
+    // 输入错误选项或选项少时不执行程序
+    if(argvIdx < 0) return 0;
+
+    const char *inputPath = argv[argvIdx];
+    const char *outputPath = argv[argvIdx+1];
 
     // 读入所有串，找出中心串
     init( inputPath );
@@ -117,13 +121,16 @@ int main(int argc, char *argv[]) {
     short *space = new short[seqs.size() * (centerSeq.size() + 1)];
     short *spaceForOther = new short[seqs.size() * (maxLength + 1)];
 
-    int BLOCKS = 4;
-    int THREADS = 64;
-    int height = seqs.size();       // 在GPU,CPU上各计算所有串的一半
 
+    // 根据用户需要运行的模式来分配工作量
+    int height = seqs.size() / 2;
+    if( MODE == GPU_ONLY )
+        height = seqs.size();
+    if( MODE == CPU_ONLY )
+        height = 0;
 
     msa(BLOCKS, THREADS, maxLength, height, centerSeq, seqs, space, spaceForOther);
-    //cpu_msa(centerSeq, seqs, 0, space, spaceForOther, maxLength);
+    cpu_msa(centerSeq, seqs, height, space, spaceForOther, maxLength);
 
     output(space, spaceForOther, outputPath);
 
