@@ -1,23 +1,10 @@
 #include <stdio.h>
-#include <string>
-#include <vector>
-#include <assert.h>
 #include <stdint.h>
 #include "util.h"
 #include "omp.h"
+#include "cuda-nw.h"
+#include "global.h"
 using namespace std;
-
-#define MISMATCH -1
-#define MATCH 0
-#define GAP -1
-
-int maxLength;          // 所有串的最大长度
-int minLength;          // 所有串的最短长度
-int avgLength;          // 所有串的平均长度
-
-string centerSeq;
-vector<string> seqs;
-char *c_seqs;
 
 
 /**
@@ -25,7 +12,7 @@ char *c_seqs;
   * m 行, n 列
   */
 __device__
-void printMatrix(int *matrix, int m, int n) {
+void printMatrix(short *matrix, int m, int n) {
     for(int i=0;i<m;i++) {
         for(int j=0;j<n;j++)
             printf("%d ", matrix[i*m+j]);
@@ -115,114 +102,39 @@ void cuda_msa(int startIdx, char *centerSeq, char *seqs, short *matrix, short *s
     if(seqIdx >= totalSequences)
         return;
 
-    short *matrixRow = (short*)((char*)matrix + tid * pitch);
+
+    // 得到当前线程要计算的串
     char *seq = seqs + (maxLength+1) * seqIdx;
 
     int m = cuda_strlen(centerSeq);
     int n = cuda_strlen(seq);
 
-    // 当前匹配的字符串所需要填的空格数组
+    short *matrixRow;
+    if(maxLength <= THRESHOLD)       // 若串的长度小于THREASHOLD，直接使用寄存器
+        matrixRow = new short[(m+1)*(maxLength+1)];
+    else
+        matrixRow = (short*)((char*)matrix + tid * pitch);
+
+    // 当前匹配的字符串所需要填的空格数组的位置
     short *spaceRow = space + (tid * (m+1));
     short *spaceForOtherRow = spaceForOther + (tid * (maxLength+1));
 
-    //printf("centerSeq: %s, seq: %s\n", centerSeq, seq);
-    //printf("seqIdx: %d, m: %d, n: %d\n", seqIdx, m, n);
-
     cuda_nw(m, n, centerSeq, seq, matrixRow, maxLength);
-    //cuda_backtrack(m, n, tid, matrixRow, spaceRow, spaceForOtherRow, maxLength);
+    cuda_backtrack(m, n, tid, matrixRow, spaceRow, spaceForOtherRow, maxLength);
 
     //printMatrix(spaceForOtherRow, 1, n+1);
-}
-
-/**
- * 输出MSA
- * 设共有n条串，平均长度m
- * 构造中心串复杂度为:O(nm)
- * 构造其他条串复杂度为:O(nm)
- */
-void output(short *space, short *spaceForOther) {
-    vector<string> allAlignedStrs;
-
-    int sWidth = centerSeq.size() + 1;      // space[] 的每条串宽度
-    int soWidth = maxLength + 1;            // spaceForOther[] 的每条串宽度
-
-    // 将所有串添加的空格汇总到一个数组中
-    // 然后给中心串插入空格
-    string alignedCenter(centerSeq);
-    vector<int> spaceForCenter(centerSeq.size()+1, 0);
-    for(int pos = centerSeq.size(); pos >= 0; pos--) {
-        int count = 0;
-        for(int idx = 0; idx < seqs.size(); idx++)
-            count = (space[idx*sWidth+pos] > count) ? space[idx*sWidth+pos] : count;
-        spaceForCenter[pos] = count;
-        if(spaceForCenter[pos] > 0)
-            //printf("pos:%d, space:%d\n", pos, spaceForCenter[pos]);
-            alignedCenter.insert(pos, spaceForCenter[pos], '-');
-    }
-
-    //printf("\n\n%s\n", alignedCenter.c_str());
-    allAlignedStrs.push_back(alignedCenter);
-
-    for(int idx = 0; idx < seqs.size(); idx++) {
-        int shift = 0;
-        string alignedStr(seqs[idx]);
-        // 先插入自己比对时的空格
-        for(int pos = seqs[idx].size(); pos >= 0; pos--) {
-            if(spaceForOther[idx*soWidth+pos] > 0)
-                alignedStr.insert(pos, spaceForOther[idx*soWidth+pos], '-');
-        }
-        // 再插入其他串比对时引入的空格
-        for(int pos = 0; pos < spaceForCenter.size(); pos++) {
-            int num = spaceForCenter[pos] - space[idx*sWidth+pos];
-            if(num > 0) {
-                alignedStr.insert(pos+shift, num, '-');
-            }
-            shift += spaceForCenter[pos];
-        }
-        //printf("%s\n", alignedStr.c_str());
-        allAlignedStrs.push_back(alignedStr);
-    }
-
-    // 将结果写入文件
-    printf("write to the output file.\n");
-    writeFastaFile("/home/wangchen/source/CUDA/CUDA-MSA/src/output2.fasta", allAlignedStrs);
+    if(maxLength <= THRESHOLD)
+        delete[] matrixRow;
 }
 
 
-void init(char *path) {
-    // 读入所有字符串
-    // centerSeq, 图中的纵向，决定了行数m
-    // seqs[idx], 图中的横向，决定了列数n
-    seqs = readFastaFile(path);
-    centerSeq = seqs[0];
-    seqs.erase(seqs.begin());
-
-    unsigned long sumLength = 0;
-    maxLength = 0, minLength = INT_MAX;
-    for(int i=0;i<seqs.size();i++) {
-        sumLength += seqs[i].size();
-        if( maxLength < seqs[i].size())
-            maxLength = seqs[i].size();
-        if( minLength > seqs[i].size())
-            minLength = seqs[i].size();
-    }
-    avgLength = sumLength / seqs.size();
-    printf("sequences size: %d\n", seqs.size());
-    printf("max length: %d, min length: %d, avg length: %d\n", maxLength, minLength, avgLength);
-
-    c_seqs = new char[(maxLength+1) * seqs.size()];
-    for(int i=0;i<seqs.size();i++) {
-        char *p = &(c_seqs[i * (maxLength + 1)]);
-        strcpy(p, seqs[i].c_str());
-    }
-}
-
-
-void msa(int BLOCKS, int THREADS) {
+void msa(int BLOCKS, int THREADS, int maxLength, int height, string centerSeq, vector<string> seqs, short *space, short *spaceForOther) {
 
     int sWidth = centerSeq.size() + 1;      // d_space的宽度
     int soWidth = maxLength + 1;            // d_spaceForOther的宽度
-    int height = seqs.size();
+    // 共有seqs.size()条串，在GPU上计算其中的height条串
+    // 剩余的交由CPU上使用openmp计算
+    //int height = seqs.size();
 
     // 给字符串分配空间
     char *d_centerSeq;
@@ -230,16 +142,18 @@ void msa(int BLOCKS, int THREADS) {
     cudaMemcpy(d_centerSeq, centerSeq.c_str(), sWidth *sizeof(char), cudaMemcpyHostToDevice);
     char *d_seqs;
     cudaMalloc((void**)&d_seqs, soWidth*height*sizeof(char));
+    char *c_seqs = new char[(maxLength+1) * height];
+    for(int i=0;i<height;i++) {
+        char *p = &(c_seqs[i * (maxLength + 1)]);
+        strcpy(p, seqs[i].c_str());
+    }
     cudaMemcpy(d_seqs, c_seqs, soWidth*height*sizeof(char), cudaMemcpyHostToDevice);
-
-    // Host端的纪录空格的数组
-    short *space = new short[height * sWidth];
-    short *spaceForOther = new short[height * soWidth];
+    delete[] c_seqs;
 
     // d_space, d_spaceForOther, d_matrix 是循环利用的
     // 每个kernel计算SEQUENCES_PER_KERNEL条串
     int SEQUENCES_PER_KERNEL = BLOCKS * THREADS;
-    int h = seqs.size() < SEQUENCES_PER_KERNEL ? seqs.size() : SEQUENCES_PER_KERNEL;
+    int h = height < SEQUENCES_PER_KERNEL ? height : SEQUENCES_PER_KERNEL;
 
     // 每条串一个空格数组
     short *d_space;
@@ -252,12 +166,11 @@ void msa(int BLOCKS, int THREADS) {
     size_t pitch;
     cudaMallocPitch((void**)&d_matrix, &pitch, soWidth*sWidth*sizeof(short), h);
 
-
     clock_t start, end;
     start = clock();
-    for(int i = 0; i <= seqs.size() / SEQUENCES_PER_KERNEL; i++) {
-        if(i==seqs.size()/SEQUENCES_PER_KERNEL)
-            h = seqs.size() % SEQUENCES_PER_KERNEL;
+    for(int i = 0; i <= height / SEQUENCES_PER_KERNEL; i++) {
+        if(i==height/SEQUENCES_PER_KERNEL)
+            h = height % SEQUENCES_PER_KERNEL;
 
         // 此次kernel计算的起始串的位置
         int startIdx = i * SEQUENCES_PER_KERNEL;
@@ -265,33 +178,16 @@ void msa(int BLOCKS, int THREADS) {
 
         cudaMemset(d_space, 0, h*sWidth*sizeof(short));
         cudaMemset(d_spaceForOther, 0, h*soWidth*sizeof(short));
-        cuda_msa<<<BLOCKS, THREADS>>>(startIdx, d_centerSeq, d_seqs, d_matrix, d_space, d_spaceForOther, pitch, maxLength, seqs.size());
+        cuda_msa<<<BLOCKS, THREADS>>>(startIdx, d_centerSeq, d_seqs, d_matrix, d_space, d_spaceForOther, pitch, maxLength, height);
         cudaMemcpy(space+startIdx*sWidth, d_space, h*sWidth*sizeof(short), cudaMemcpyDeviceToHost);
         cudaMemcpy(spaceForOther+startIdx*soWidth, d_spaceForOther, h*soWidth*sizeof(short), cudaMemcpyDeviceToHost);
     }
     end = clock();
-    printf("DP calculation time: %f\n", (double)(end-start)/CLOCKS_PER_SEC);
-
-    start = clock();
-    //output(space, spaceForOther);
-    end = clock();
-    printf("output time: %f\n", (double)(end-start)/CLOCKS_PER_SEC);
+    printf("GPU DP calculation time: %f\n", (double)(end-start)/CLOCKS_PER_SEC);
 
     cudaFree(d_space);
     cudaFree(d_spaceForOther);
     cudaFree(d_matrix);
     cudaFree(d_centerSeq);
     cudaFree(d_seqs);
-
-    delete c_seqs;
-    delete space;
-    delete spaceForOther;
-}
-
-int main(int argc, char *argv[]) {
-    assert(argc>=2);
-    init(argv[1]);
-    int BLOCKS = 6;
-    int THREADS = 128;
-    msa(BLOCKS, THREADS);
 }

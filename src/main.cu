@@ -1,72 +1,134 @@
 #include <stdio.h>
+#include <assert.h>
 #include "util.h"
-#include "center-star.h"
 #include "sp.h"
+#include "center-star.h"
+#include "cuda-nw.h"
+#include "nw.h"
+#include "omp.h"
 using namespace std;
 
-__device__
-void test(char *result, int num) {
 
+/**
+ * 定义全局变量
+ * centerSeq 存储中心串
+ * seqs 存储所有其他串
+ */
+string centerSeq;
+vector<string> seqs;
+int maxLength;      // 最长的串的长度
+
+
+/**
+ * 从path读如fasta格式文件，
+ * 完成初始化工作并输出相关信息
+ */
+void init(const char *path) {
+    // 读入所有字符串
+    // centerSeq, 图中的纵向，决定了行数m
+    // seqs[idx], 图中的横向，决定了列数n
+    seqs = readFastaFile(path);
+
+    // 找出中心串
+    int centerSeqIdx = findCenterSequence(seqs);
+
+    centerSeq = seqs[0];
+    seqs.erase(seqs.begin() + centerSeqIdx);
+
+    unsigned long sumLength = 0;
+    maxLength = centerSeq.size();
+    int minLength = centerSeq.size();
+    for(int i=0;i<seqs.size();i++) {
+        sumLength += seqs[i].size();
+        if( maxLength < seqs[i].size())
+            maxLength = seqs[i].size();
+        if( minLength > seqs[i].size())
+            minLength = seqs[i].size();
+    }
+    int avgLength = sumLength / seqs.size();
+    printf("sequences size: %d\n", seqs.size());
+    printf("max length: %d, min length: %d, avg length: %d\n", maxLength, minLength, avgLength);
 }
-__global__
-void fun(char *result, int num) {
-    test(result, num);
-}
 
-// 计算Sum of Pairs
-void calSP(list<string> seqs) {
-    int sp = sumOfPairs(seqs);
-    printf("sp:%d, avg sp: %d\n", sp, sp/seqs.size());
-}
+/**
+  * 将MSA结果输出到path文件中
+  * 共有n条串，平均长度m
+  * 构造带空格的中心串复杂度为:O(nm)
+  * 构造带空格的其他条串复杂度为:O(nm)
+  */
+void output(short *space, short *spaceForOther, const char* path) {
+    vector<string> allAlignedStrs;
 
-// 找到中心串
-void findCenterSequence(list<string> sequences) {
-    int vec[65536] = {0};
+    int sWidth = centerSeq.size() + 1;      // space[] 的每条串宽度
+    int soWidth = maxLength + 1;            // spaceForOther[] 的每条串宽度
 
-    list<string>::iterator it;
-    for(it=sequences.begin();it!=sequences.end();it++) {
-        const char *str = (*it).c_str();
-        setOccVector(str, vec);
+    // 将所有串添加的空格汇总到一个数组中
+    // 然后给中心串插入空格
+    string alignedCenter(centerSeq);
+    vector<int> spaceForCenter(centerSeq.size()+1, 0);
+    for(int pos = centerSeq.size(); pos >= 0; pos--) {
+        int count = 0;
+        for(int idx = 0; idx < seqs.size(); idx++)
+            count = (space[idx*sWidth+pos] > count) ? space[idx*sWidth+pos] : count;
+        spaceForCenter[pos] = count;
+        if(spaceForCenter[pos] > 0)
+            //printf("pos:%d, space:%d\n", pos, spaceForCenter[pos]);
+            alignedCenter.insert(pos, spaceForCenter[pos], '-');
     }
 
-    int i = 1;
+    //printf("\n\n%s\n", alignedCenter.c_str());
+    allAlignedStrs.push_back(alignedCenter);
 
-    int maxIndex = 0, maxCount = 0;
-    for(it=sequences.begin();it!=sequences.end();it++) {
-        const char *str = (*it).c_str();
-        int count = countSequences(str, vec);
-        if(count > maxCount) {
-            maxIndex = i;
-            maxCount = count;
+    for(int idx = 0; idx < seqs.size(); idx++) {
+        int shift = 0;
+        string alignedStr(seqs[idx]);
+        // 先插入自己比对时的空格
+        for(int pos = seqs[idx].size(); pos >= 0; pos--) {
+            if(spaceForOther[idx*soWidth+pos] > 0)
+                alignedStr.insert(pos, spaceForOther[idx*soWidth+pos], '-');
         }
-        printf("seq: %d, count: %d,\n", i++, count);
+        // 再插入其他串比对时引入的空格
+        for(int pos = 0; pos < spaceForCenter.size(); pos++) {
+            int num = spaceForCenter[pos] - space[idx*sWidth+pos];
+            if(num > 0) {
+                alignedStr.insert(pos+shift, num, '-');
+            }
+            shift += spaceForCenter[pos];
+        }
+        //printf("%s\n", alignedStr.c_str());
+        allAlignedStrs.push_back(alignedStr);
     }
 
-    printf("maxIndex: %d, maxCount:%d\n", maxIndex, maxCount);
+    // 将结果写入文件
+    printf("write to the output file.\n");
+    writeFastaFile(path, allAlignedStrs);
 }
 
-int main() {
+int main(int argc, char *argv[]) {
 
-    list<string> sequences = readFastaFile("/home/wangchen/source/CUDA/CUDA-MSA/mt_genome_1x.fasta");
+    assert(argc>=3);
+    const char *inputPath = argv[1];
+    const char *outputPath = argv[2];
 
-    findCenterSequence(sequences);
+    // 读入所有串，找出中心串
+    init( inputPath );
 
-    //calSP(sequences);
+    // Host端的纪录空格的数组
+    short *space = new short[seqs.size() * (centerSeq.size() + 1)];
+    short *spaceForOther = new short[seqs.size() * (maxLength + 1)];
 
-    /*
-    char *d_result;
-    cudaMalloc(&d_result, 10*sizeof(char));
+    int BLOCKS = 4;
+    int THREADS = 64;
+    int height = seqs.size();       // 在GPU,CPU上各计算所有串的一半
 
-    fun<<<2, 512>>>(d_result, 10);
 
-    char *result = (char *)malloc(sizeof(char) * 11);
-    memset(result, '\0', sizeof(char)*11);
-    cudaMemcpy(result, d_result, sizeof(char)*10, cudaMemcpyDeviceToHost);
-    printf("result:%s\n", result);
+    msa(BLOCKS, THREADS, maxLength, height, centerSeq, seqs, space, spaceForOther);
+    //cpu_msa(centerSeq, seqs, 0, space, spaceForOther, maxLength);
 
-    free(result);
-    cudaFree(d_result);
-    */
+    output(space, spaceForOther, outputPath);
+
+    delete[] space;
+    delete[] spaceForOther;
 }
 
 
