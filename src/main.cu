@@ -129,8 +129,33 @@ int main(int argc, char *argv[]) {
     if( MODE == CPU_ONLY )
         height = 0;
 
-    msa(BLOCKS, THREADS, maxLength, height, centerSeq, seqs, space, spaceForOther);
-    cpu_msa(centerSeq, seqs, height, space, spaceForOther, maxLength);
+    omp_set_nested(1);      // 设置允许嵌套平行，在cpu_msa中使用了parallel for
+    double start = omp_get_wtime();
+
+#pragma omp parallel sections num_threads(2)
+{
+    #pragma omp section             // GPU
+    {
+        if( MODE != CPU_ONLY ) {
+            double start = omp_get_wtime();
+            msa(BLOCKS, THREADS, maxLength, height, centerSeq, seqs, space, spaceForOther);
+            double end = omp_get_wtime();
+            printf("GPU DP calulation, use time: %f\n", end-start);
+        }
+    }
+
+    #pragma omp section             // CPU
+    {
+        if( MODE != GPU_ONLY ) {
+            double start = omp_get_wtime();
+            cpu_msa(centerSeq, seqs, height, space, spaceForOther, maxLength);
+            double end = omp_get_wtime();
+            printf("CPU DP calulation, use time: %f\n", end-start);
+        }
+    }
+}
+    double end = omp_get_wtime();
+    printf("total time: %f\n", end-start);
 
     output(space, spaceForOther, outputPath);
 

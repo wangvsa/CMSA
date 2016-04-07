@@ -167,8 +167,6 @@ void msa(int BLOCKS, int THREADS, int maxLength, int height, string centerSeq, v
     size_t pitch;
     cudaMallocPitch((void**)&d_matrix, &pitch, soWidth*sWidth*sizeof(short), h);
 
-    clock_t start, end;
-    start = clock();
     for(int i = 0; i <= height / SEQUENCES_PER_KERNEL; i++) {
         if(i==height/SEQUENCES_PER_KERNEL)
             h = height % SEQUENCES_PER_KERNEL;
@@ -183,8 +181,6 @@ void msa(int BLOCKS, int THREADS, int maxLength, int height, string centerSeq, v
         cudaMemcpy(space+startIdx*sWidth, d_space, h*sWidth*sizeof(short), cudaMemcpyDeviceToHost);
         cudaMemcpy(spaceForOther+startIdx*soWidth, d_spaceForOther, h*soWidth*sizeof(short), cudaMemcpyDeviceToHost);
     }
-    end = clock();
-    printf("GPU DP calculation time: %f\n", (double)(end-start)/CLOCKS_PER_SEC);
 
     cudaFree(d_space);
     cudaFree(d_spaceForOther);

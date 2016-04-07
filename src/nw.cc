@@ -90,14 +90,11 @@ void cpu_msa(string centerSeq, vector<string> seqs, int startIdx, short *space, 
 
     // 计算DP矩阵, 执行backtrack
     Matrix matrix;
-    start = omp_get_wtime();
     #pragma omp parallel for private(matrix)
     for(int idx = startIdx; idx < seqs.size(); idx++) {
         matrix = nw(centerSeq, seqs[idx]);
         backtrack(matrix, centerSeq, seqs, idx, space, spaceForOther, maxLength);
-        printf("%d/%d, sequence length:%d\n", idx+1, seqs.size(), (int)seqs[idx].size());
+        //printf("%d/%d, sequence length:%d\n", idx+1, seqs.size(), (int)seqs[idx].size());
     }
-    end = omp_get_wtime();
-    printf("CPU DP calculation, use time:%f\n", end-start);
 
 }
