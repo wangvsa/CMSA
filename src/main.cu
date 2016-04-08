@@ -46,8 +46,16 @@ void init(const char *path) {
             minLength = seqs[i].size();
     }
     int avgLength = sumLength / seqs.size();
-    printf("sequences size: %d\n", seqs.size());
-    printf("max length: %d, min length: %d, avg length: %d\n", maxLength, minLength, avgLength);
+
+    // 输出相关信息
+    printf("\n\n=========================================\n");
+    printf("Sequences Size: %d\n", seqs.size());
+    printf("Max: %d, Min: %d, Avg: %d\n", maxLength, minLength, avgLength);
+    printf("Center Sequence Index: %d\n", centerSeqIdx);
+    printf("Workload Ratio of GPU/CPU: %d:%d\n", (MODE==GPU_ONLY)?WORKLOAD_RATIO:0, (MODE==GPU_ONLY)?1:0);
+    printf("Block Size: %d, Thread Size: %d\n", BLOCKS, THREADS);
+    printf("Threshold to Use Registers: %d\n", THRESHOLD);
+    printf("=========================================\n\n");
 }
 
 /**
@@ -107,8 +115,9 @@ void output(short *space, short *spaceForOther, const char* path) {
 
 int main(int argc, char *argv[]) {
 
+    // 解析用户参数
     int argvIdx = parseOptions(argc, argv);
-    // 输入错误选项或选项少时不执行程序
+    // 输入错误选项或选项不够时不执行程序
     if(argvIdx < 0) return 0;
 
     const char *inputPath = argv[argvIdx];
@@ -123,13 +132,13 @@ int main(int argc, char *argv[]) {
 
 
     // 根据用户需要运行的模式来分配工作量
-    int height = seqs.size() / 2;
+    int height = seqs.size() / (WORKLOAD_RATIO+1) * WORKLOAD_RATIO;     // GPU部分任务量
     if( MODE == GPU_ONLY )
         height = seqs.size();
     if( MODE == CPU_ONLY )
         height = 0;
 
-    omp_set_nested(1);      // 设置允许嵌套平行，在cpu_msa中使用了parallel for
+    omp_set_nested(1);      // 设置允许嵌套并行，在cpu_msa中使用了parallel for
     double start = omp_get_wtime();
 
 #pragma omp parallel sections num_threads(2)

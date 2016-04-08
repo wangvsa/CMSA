@@ -102,7 +102,6 @@ void cuda_msa(int startIdx, char *centerSeq, char *seqs, short *matrix, short *s
     if(seqIdx >= totalSequences)
         return;
 
-
     // 得到当前线程要计算的串
     char *seq = seqs + (maxLength+1) * seqIdx;
 
@@ -177,7 +176,13 @@ void msa(int BLOCKS, int THREADS, int maxLength, int height, string centerSeq, v
 
         cudaMemset(d_space, 0, h*sWidth*sizeof(short));
         cudaMemset(d_spaceForOther, 0, h*soWidth*sizeof(short));
+
         cuda_msa<<<BLOCKS, THREADS>>>(startIdx, d_centerSeq, d_seqs, d_matrix, d_space, d_spaceForOther, pitch, maxLength, height, THRESHOLD);
+        cudaError_t err  = cudaGetLastError();
+        if ( cudaSuccess != err )
+            printf("Error: %d, %s\n", err, cudaGetErrorString(err));
+
+
         cudaMemcpy(space+startIdx*sWidth, d_space, h*sWidth*sizeof(short), cudaMemcpyDeviceToHost);
         cudaMemcpy(spaceForOther+startIdx*soWidth, d_spaceForOther, h*soWidth*sizeof(short), cudaMemcpyDeviceToHost);
     }

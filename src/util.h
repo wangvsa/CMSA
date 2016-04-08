@@ -2,6 +2,8 @@
 #define _UTIL_H_
 #include <string>
 #include <vector>
+#include <iostream>
+#include <cuda.h>
 
 std::vector<std::string> readFastaFile(const char *path);
 

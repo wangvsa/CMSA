@@ -93,7 +93,7 @@ int findCenterSequence(vector<string> sequences) {
         //printf("seq: %d, count: %d,\n", i++, count);
     }
 
-    printf("maxIndex: %d, maxCount:%d\n", maxIndex, maxCount);
+    //printf("maxIndex: %d, maxCount:%d\n", maxIndex, maxCount);
 
     return maxIndex;
 }
