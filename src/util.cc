@@ -40,7 +40,7 @@ void writeFastaFile(const char* path, vector<string> strs) {
 
 void displayUsage() {
     printf("Usage :\n");
-    printf("./msa [options] input_path output_path\n");
+    printf("./msa.out [options] input_path output_path\n");
     printf("Options:\n");
     printf("\t-g\t: use GPU only (default use both GPU and CPU)\n");
     printf("\t-c\t: use CPU only (default use both GPU and CPU)\n");
