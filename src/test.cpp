@@ -4,6 +4,9 @@
 #include "util.h"
 using namespace std;
 
+/**
+ * 测试用文件，与MSA程序无关
+ */
 
 int main() {
     vector<string> seqs = readFastaFile("/home/wangchen/source/CUDA/CUDA-MSA/16s_rRNA_small.fasta");
