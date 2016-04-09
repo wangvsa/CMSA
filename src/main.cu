@@ -147,7 +147,7 @@ int main(int argc, char *argv[]) {
     {
         if( MODE != CPU_ONLY ) {
             double start = omp_get_wtime();
-            msa(BLOCKS, THREADS, maxLength, height, centerSeq, seqs, space, spaceForOther);
+            cuda_msa(BLOCKS, THREADS, maxLength, height, centerSeq, seqs, space, spaceForOther);
             double end = omp_get_wtime();
             printf("GPU DP calulation, use time: %f\n", end-start);
         }

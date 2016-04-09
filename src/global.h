@@ -9,6 +9,9 @@
 #define MATCH 0
 #define GAP -1
 
+#define MAX_THREADS 1024
+#define MAX_BLOCKS 128
+
 // 如果串的长度小于THRESHOLD，直接使用register存储DP矩阵
 extern int THRESHOLD;
 
