@@ -29,9 +29,9 @@ short** nw(string str1, string str2) {
 
     // 直接定义二维数组，比使用vector<vector>的形式节省内存
     // 缺点是需要自己管理内存释放
-    short **matrix = new short*[m+1];
+    short **matrix = new short*[m];
     for(int i = 0; i < m; i++)
-        matrix[i] = new short[n+1];
+        matrix[i] = new short[n];
 
     // 初始化矩阵
     for(int i=0;i<n;i++)
@@ -80,8 +80,8 @@ void backtrack(short **matrix, string centerSeq, vector<string> seqs, int seqIdx
         }
     }
 
-    // 释放matrix内存
-    for(int i=0;i<m;i++)
+    // 释放matrix[(m+1, n+1]内存
+    for(int i=0; i<=m; i++)
         delete[] matrix[i];
     delete[] matrix;
 }
