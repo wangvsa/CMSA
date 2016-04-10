@@ -47,12 +47,17 @@ void init(const char *path) {
     }
     int avgLength = sumLength / seqs.size();
 
+    // 检查Kernel的配置, 返回值是是否可以在GPU执行
+    bool canUseGPU = configureKernel(centerSeq.size(), maxLength, sumLength);
+    if(!canUseGPU) MODE = CPU_ONLY;
+
+
     // 输出相关信息
     printf("\n\n=========================================\n");
     printf("Sequences Size: %d\n", seqs.size());
     printf("Max: %d, Min: %d, Avg: %d\n", maxLength, minLength, avgLength);
     printf("Center Sequence Index: %d\n", centerSeqIdx);
-    printf("Workload Ratio of GPU/CPU: %d:%d\n", (MODE==GPU_ONLY)?WORKLOAD_RATIO:0, (MODE==GPU_ONLY)?1:0);
+    printf("Workload Ratio of GPU/CPU: %d:%d\n", (MODE==GPU_ONLY)?WORKLOAD_RATIO:0, (MODE==GPU_ONLY)?0:1);
     printf("Block Size: %d, Thread Size: %d\n", BLOCKS, THREADS);
     printf("Threshold to Use Registers: %d\n", THRESHOLD);
     printf("=========================================\n\n");

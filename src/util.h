@@ -5,8 +5,14 @@
 #include <iostream>
 #include <cuda.h>
 
+/**
+ * 读入Fasta格式的文件
+ */
 std::vector<std::string> readFastaFile(const char *path);
 
+/**
+ * 将MSA的结果写入到Fasta格式文件
+ */
 void writeFastaFile(const char *path, std::vector<std::string> strs);
 
 /**
@@ -19,5 +25,8 @@ int parseOptions(int argc, char* argv[]);
  * 显示帮助信息
  */
 void displayUsage();
+
+
+bool configureKernel(int centerSeqLength, int maxLength, unsigned long sumLength);
 
 #endif

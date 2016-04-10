@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <cuda.h>
 #include "util.h"
 #include "global.h"
 using namespace std;
@@ -85,4 +86,40 @@ int parseOptions(int argc, char* argv[]) {
     }
 
     return optind;
+}
+
+
+bool configureKernel(int centerSeqLength, int maxLength, unsigned long sumLength) {
+
+    size_t freeMem, totalMem;
+    cudaMemGetInfo(&freeMem, &totalMem);
+
+    // 每次两两匹配的DP矩阵所需要的空间
+    int matrixSize = sizeof(short) * (centerSeqLength+1) * (maxLength+1);
+
+    // 得到每个Kernel可以执行的串数（即可并发的总线程数BLOCKS*THREADS）
+    // 不应该使用所有的空闲内存，在此留出一部分（1000MB）
+    freeMem = freeMem - sizeof(char) * sumLength - 1000*1024*1024;
+    int seqs = freeMem / matrixSize;
+
+    printf("freeMem: %dMB, sumLengthSize: %dMB, matrix :%dKB, seqs: %d\n", freeMem/1024/1024, sumLength/1024/1024, matrixSize/1024, seqs);
+
+    // 先判断用户设置的<BLOCKS, THREADS>是否满足内存限制
+    // 如果不满足，则自动设置一个<BLOCKS, THREADS>
+    if(seqs >= BLOCKS*THREADS)
+        return true;
+
+    // 在满足内存限制的前提下，
+    // 满足BLOCKS >= 3 且 THREADS >= 32则可以在GPU执行
+    int b, t;
+    for(t = THREADS; t >= 32; t -= 32) {
+        b = seqs / t;
+        if( b >= 3 && t >= 32) {
+            BLOCKS = b;
+            THREADS = t;
+            return true;
+        }
+    }
+
+    return false;
 }

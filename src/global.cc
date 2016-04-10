@@ -1,7 +1,7 @@
 #include "global.h"
 
-int BLOCKS = 6;
-int THREADS = 64;
+int BLOCKS = 12;
+int THREADS = 256;
 int THRESHOLD = 100;
 
 int WORKLOAD_RATIO = 1; // 默认GPU/CPU任务比例1:1，即各自负责一半的串

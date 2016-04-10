@@ -64,12 +64,10 @@ void freeDeviceMatrix() {
   * matrix          out, 需要计算的DP矩阵
   */
 __device__
-void cuda_nw(int m, int n, char *centerSeq, char *seq, int maxLength) {
+void cuda_nw(int m, int n, char *centerSeq, char *seq, int width) {
 
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     short *matrix = d_matrixPtr[tid];
-
-    int width = maxLength + 1;
 
     // 初始化矩阵, DP矩阵m+1行,n+1列
     for(int i=0;i<=m;i++)
@@ -85,8 +83,8 @@ void cuda_nw(int m, int n, char *centerSeq, char *seq, int maxLength) {
             matrix[i*width+j] = max(up, left, diag);
         }
     }
-    //if(tid==0)
-    //    printMatrix(matrix, m, n);
+
+    //printMatrix(matrix, m, n);
 }
 
 /**
@@ -98,12 +96,10 @@ void cuda_nw(int m, int n, char *centerSeq, char *seq, int maxLength) {
   * spaceForOther   out, 需要计算的本次匹配给当前串引入的空格
   */
 __device__
-void cuda_backtrack(int m, int n, int seqIdx, short *spaceRow, short *spaceForOtherRow, int maxLength) {
+void cuda_backtrack(int m, int n, int seqIdx, short *spaceRow, short *spaceForOtherRow, int width) {
 
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     short *matrix = d_matrixPtr[tid];
-
-    int width = maxLength + 1;
 
     // 从(m, n) 遍历到 (0, 0)
     // DP矩阵的纬度是m+1, n+1
@@ -127,23 +123,24 @@ void cuda_backtrack(int m, int n, int seqIdx, short *spaceRow, short *spaceForOt
 
 __global__
 void kernel(int startIdx, char *centerSeq, char *seqs, short *space, short *spaceForOther, int maxLength, int totalSequences, int THRESHOLD) {
+
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     int seqIdx = tid + startIdx;
-    if(seqIdx >= totalSequences)
-        return;
+    if(seqIdx >= totalSequences) return;
 
     // 得到当前线程要计算的串
-    char *seq = seqs + (maxLength+1) * seqIdx;
+    int width = maxLength + 1;
+    char *seq = seqs + width * seqIdx;
 
     int m = cuda_strlen(centerSeq);
     int n = cuda_strlen(seq);
 
     // 当前匹配的字符串所需要填的空格数组的位置
-    short *spaceRow = space + (tid * (m+1));
-    short *spaceForOtherRow = spaceForOther + (tid * (maxLength+1));
+    short *spaceRow = space + tid * (m+1);
+    short *spaceForOtherRow = spaceForOther + tid * width;
 
-    cuda_nw(m, n, centerSeq, seq, maxLength);
-    cuda_backtrack(m, n, tid, spaceRow, spaceForOtherRow, maxLength);
+    cuda_nw(m, n, centerSeq, seq, width);
+    cuda_backtrack(m, n, tid, spaceRow, spaceForOtherRow, width);
 
     //printMatrix(spaceForOtherRow, 1, n+1);
 }
@@ -184,7 +181,7 @@ void cuda_msa(int BLOCKS, int THREADS, int maxLength, int height, string centerS
     cudaMalloc((void**)&d_spaceForOther, h*soWidth*sizeof(short));
 
 
-    // 申请(可用内存-500M)作为堆内存
+    // 设置(可用内存-500M)堆内存的上限
     size_t freeMem, totalMem;
     cudaMemGetInfo(&freeMem, &totalMem);
     cudaDeviceSetLimit(cudaLimitMallocHeapSize, freeMem-(500*1024*1024));
@@ -210,7 +207,6 @@ void cuda_msa(int BLOCKS, int THREADS, int maxLength, int height, string centerS
         cudaError_t err  = cudaGetLastError();
         if ( cudaSuccess != err )
             printf("Error: %d, %s\n", err, cudaGetErrorString(err));
-
 
         cudaMemcpy(space+startIdx*sWidth, d_space, h*sWidth*sizeof(short), cudaMemcpyDeviceToHost);
         cudaMemcpy(spaceForOther+startIdx*soWidth, d_spaceForOther, h*soWidth*sizeof(short), cudaMemcpyDeviceToHost);
