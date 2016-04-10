@@ -48,7 +48,6 @@ void displayUsage() {
     printf("\t-w <int>\t: specify the workload ratio of CPU / CPU\n");
     printf("\t-b <int>\t: specify the number of blocks per grid\n");
     printf("\t-t <int>\t: specify the number of threads per block\n");
-    printf("\t-l <int>\t: specify the threshold to determine wheather use the register or global memory\n");
 }
 
 
@@ -59,7 +58,7 @@ int parseOptions(int argc, char* argv[]) {
     }
 
     int oc;
-    while((oc = getopt(argc, argv, "gcw:b:t:l:")) != -1) {
+    while((oc = getopt(argc, argv, "gcw:b:t:")) != -1) {
         switch(oc) {
             case 'g':                       // 只使用GPU
                 MODE = GPU_ONLY;
@@ -75,9 +74,6 @@ int parseOptions(int argc, char* argv[]) {
                 break;
             case 't':                       // 设置Threads数量
                 THREADS = atoi(optarg);
-                break;
-            case 'l':                       // 设置THRESHOLD
-                THRESHOLD = atoi(optarg);
                 break;
             case '?':                       // 输入错误选项，不执行程序
                 displayUsage();

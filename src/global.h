@@ -12,8 +12,6 @@
 #define MAX_THREADS 1024
 #define MAX_BLOCKS 128
 
-// 如果串的长度小于THRESHOLD，直接使用register存储DP矩阵
-extern int THRESHOLD;
 
 // 每个Kernel中的Block数量
 extern int BLOCKS;
