@@ -122,7 +122,7 @@ void cuda_backtrack(int m, int n, int seqIdx, short *spaceRow, short *spaceForOt
 
 
 __global__
-void kernel(int startIdx, char *centerSeq, char *seqs, short *space, short *spaceForOther, int maxLength, int totalSequences, int THRESHOLD) {
+void kernel(int startIdx, char *centerSeq, char *seqs, short *space, short *spaceForOther, int maxLength, int totalSequences) {
 
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     int seqIdx = tid + startIdx;
@@ -203,7 +203,7 @@ void cuda_msa(int BLOCKS, int THREADS, int maxLength, int height, string centerS
         cudaMemset(d_space, 0, h*sWidth*sizeof(short));
         cudaMemset(d_spaceForOther, 0, h*soWidth*sizeof(short));
 
-        kernel<<<BLOCKS, THREADS>>>(startIdx, d_centerSeq, d_seqs, d_space, d_spaceForOther, maxLength, height, THRESHOLD);
+        kernel<<<BLOCKS, THREADS>>>(startIdx, d_centerSeq, d_seqs, d_space, d_spaceForOther, maxLength, height);
         cudaError_t err  = cudaGetLastError();
         if ( cudaSuccess != err )
             printf("Error: %d, %s\n", err, cudaGetErrorString(err));
