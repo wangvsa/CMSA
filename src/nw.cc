@@ -5,13 +5,7 @@
 using namespace std;
 
 
-// 定义二维数组
-typedef vector< vector<int> > Matrix;
-
-
-void printMatrix(Matrix matrix) {
-    int m = matrix.size();
-    int n = matrix[0].size();
+void printMatrix(short **matrix, int m, int n) {
     for(int i=0;i<m;i++) {
         for(int j=0;j<n;j++) {
             printf("%d ", matrix[i][j]);
@@ -27,12 +21,18 @@ int cpu_max(int v1, int v2, int v3) {
     return max(max(v1, v2), v3);
 }
 
-Matrix nw(string str1, string str2) {
+short** nw(string str1, string str2) {
+
     // m行, n列
     int m = str1.size() + 1;
     int n = str2.size() + 1;
 
-    Matrix matrix(m, vector<int>(n));
+    // 直接定义二维数组，比使用vector<vector>的形式节省内存
+    // 缺点是需要自己管理内存释放
+    short **matrix = new short*[m+1];
+    for(int i = 0; i < m; i++)
+        matrix[i] = new short[n+1];
+
     // 初始化矩阵
     for(int i=0;i<n;i++)
         matrix[0][i] = i * MISMATCH;
@@ -49,11 +49,11 @@ Matrix nw(string str1, string str2) {
         }
     }
 
-    // printMatrix(matrix);
+    // printMatrix(matrix, m, n);
     return matrix;
 }
 
-void backtrack(Matrix matrix, string centerSeq, vector<string> seqs, int seqIdx, short *space, short *spaceForOther, int maxLength) {
+void backtrack(short **matrix, string centerSeq, vector<string> seqs, int seqIdx, short *space, short *spaceForOther, int maxLength) {
     string str1 = centerSeq;
     string str2 = seqs[seqIdx];
 
@@ -79,6 +79,11 @@ void backtrack(Matrix matrix, string centerSeq, vector<string> seqs, int seqIdx,
             j--;
         }
     }
+
+    // 释放matrix内存
+    for(int i=0;i<m;i++)
+        delete[] matrix[i];
+    delete[] matrix;
 }
 
 
@@ -89,12 +94,11 @@ void cpu_msa(string centerSeq, vector<string> seqs, int startIdx, short *space, 
     double start, end;
 
     // 计算DP矩阵, 执行backtrack
-    Matrix matrix;
-    #pragma omp parallel for private(matrix)
+    #pragma omp parallel for
     for(int idx = startIdx; idx < seqs.size(); idx++) {
-        matrix = nw(centerSeq, seqs[idx]);
+        short **matrix = nw(centerSeq, seqs[idx]);
         backtrack(matrix, centerSeq, seqs, idx, space, spaceForOther, maxLength);
-        //printf("%d/%d, sequence length:%d\n", idx+1, seqs.size(), (int)seqs[idx].size());
+        printf("%d/%d, sequence length:%d\n", idx+1, seqs.size(), (int)seqs[idx].size());
     }
 
 }
