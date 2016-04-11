@@ -91,14 +91,14 @@ bool configureKernel(int centerSeqLength, int maxLength, unsigned long sumLength
     cudaMemGetInfo(&freeMem, &totalMem);
 
     // 每次两两匹配的DP矩阵所需要的空间
-    int matrixSize = sizeof(short) * (centerSeqLength+1) * (maxLength+1);
+    size_t matrixSize = sizeof(short) * (centerSeqLength+1) * (maxLength+1);
 
     // 得到每个Kernel可以执行的串数（即可并发的总线程数BLOCKS*THREADS）
-    // 不应该使用所有的空闲内存，在此留出一部分（1000MB）
-    freeMem = freeMem - sizeof(char) * sumLength - 1000*1024*1024;
+    // 不应该使用所有的空闲内存，在此留出一部分20%
+    freeMem = (freeMem - sizeof(char) * sumLength) * 0.8;
     int seqs = freeMem / matrixSize;
 
-    printf("freeMem: %dMB, sumLengthSize: %dMB, matrix :%dKB, seqs: %d\n", freeMem/1024/1024, sumLength/1024/1024, matrixSize/1024, seqs);
+    printf("freeMem: %luMB, sumLengthSize: %luMB, matrix :%luKB, seqs: %d\n", freeMem/1024/1024, sumLength/1024/1024, matrixSize/1024, seqs);
 
     // 先判断用户设置的<BLOCKS, THREADS>是否满足内存限制
     // 如果不满足，则自动设置一个<BLOCKS, THREADS>

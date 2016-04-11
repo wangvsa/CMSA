@@ -54,7 +54,7 @@ void init(const char *path) {
 
     // 输出相关信息
     printf("\n\n=========================================\n");
-    printf("Sequences Size: %d\n", seqs.size());
+    printf("Sequences Size: %lu\n", seqs.size());
     printf("Max: %d, Min: %d, Avg: %d\n", maxLength, minLength, avgLength);
     printf("Center Sequence Index: %d\n", centerSeqIdx);
     printf("Workload Ratio of GPU/CPU: %d:%d\n", (MODE==GPU_ONLY)?WORKLOAD_RATIO:0, (MODE==GPU_ONLY)?0:1);
