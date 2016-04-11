@@ -81,6 +81,33 @@ void cuda_nw(int m, int n, char *centerSeq, char *seq, short*matrix, int width) 
 
     //printMatrix(matrix, m, n);
 }
+__device__
+void cuda_nw_3d(int m, int n, char *centerSeq, char *seq, cudaPitchedPtr matrix3DPtr) {
+    size_t slicePitch = matrix3DPtr.pitch * (m+1);
+    char *slice = (char *)matrix3DPtr.ptr + get_tid * slicePitch;
+
+    // 初始化矩阵, DP矩阵m+1行,n+1列
+    short *matrixRow;
+    for(int i=0;i<=m;i++) {
+        matrixRow = (short *)(slice + i * matrix3DPtr.pitch);
+        matrixRow[0] = i * MISMATCH;   // matrix[i][0]
+    }
+    matrixRow = (short *)(slice + 0 * matrix3DPtr.pitch);
+    for(int j=0;j<=n;j++) {
+        matrixRow[j] = j * MISMATCH;   // matrix[0][j];
+    }
+
+    for(int i=1;i<=m;i++) {
+        short *matrixLastRow = (short *)(slice + (i-1) * matrix3DPtr.pitch);
+        short *matrixRow = (short *)(slice + i * matrix3DPtr.pitch);
+        for(int j=1;j<=n;j++) {
+            int up = matrixLastRow[j] + GAP;                                                // matrix[i-1][j]
+            int left = matrixRow[j-1] + GAP;                                                // matrix[i][j-1]
+            int diag = matrixLastRow[j-1] + ((centerSeq[i-1]==seq[j-1])?MATCH:MISMATCH);    // matrix[i-1][j-1]
+            matrixRow[j] = max(up, left, diag);
+        }
+    }
+}
 
 /**
   * m               in, 中心串长度, m 行
@@ -110,10 +137,35 @@ void cuda_backtrack(int m, int n, short* matrix, short *spaceRow, short *spaceFo
         }
     }
 }
+__device__
+void cuda_backtrack_3d(int m, int n, cudaPitchedPtr matrix3DPtr, short *spaceRow, short *spaceForOtherRow) {
+    size_t slicePitch = matrix3DPtr.pitch * (m+1);
+    char *slice = (char *)matrix3DPtr.ptr + get_tid * slicePitch;
+
+    // 从(m, n) 遍历到 (0, 0)
+    // DP矩阵的纬度是m+1, n+1
+    int i = m, j = n;
+    while(i!=0 || j!=0) {
+        short *matrixLastRow = (short *)(slice + (i-1) * matrix3DPtr.pitch);
+        short *matrixRow = (short *)(slice + i * matrix3DPtr.pitch);
+        int score = matrixRow[j];                                   // matrix[i][j]
+        //printf("%d,%d:  %d\n", i, j, score);
+        if(i > 0 && matrixLastRow[j] + GAP == score) {              // matrix[i-1][j]
+            spaceForOtherRow[j]++;                                  // spaceForOther[seqIdx][j]
+            i--;
+        } else if(j > 0 && matrixRow[j-1] + GAP == score) {         // matrix[i][j-1]
+            spaceRow[i]++;                                          // space[seqIdx][i]
+            j--;
+        } else {
+            i--;
+            j--;
+        }
+    }
+}
 
 
 __global__
-void kernel(int startIdx, char *centerSeq, char *seqs, short *space, short *spaceForOther, int maxLength, int totalSequences) {
+void kernel(int startIdx, char *centerSeq, char *seqs, cudaPitchedPtr matrix3DPtr, short *space, short *spaceForOther, int maxLength, int totalSequences) {
 
     int tid = get_tid;
     int seqIdx = tid + startIdx;
@@ -131,9 +183,14 @@ void kernel(int startIdx, char *centerSeq, char *seqs, short *space, short *spac
     short *spaceForOtherRow = spaceForOther + tid * width;
 
     // 计算使用的DP矩阵
-    short* matrix = d_matrixPtr[tid];
-    cuda_nw(m, n, centerSeq, seq, matrix, width);
-    cuda_backtrack(m, n, matrix, spaceRow, spaceForOtherRow, width);
+    if(!matrix3DPtr.ptr) {
+        short* matrix = d_matrixPtr[tid];
+        cuda_nw(m, n, centerSeq, seq, matrix, width);
+        cuda_backtrack(m, n, matrix, spaceRow, spaceForOtherRow, width);
+    } else {
+        cuda_nw_3d(m, n, centerSeq, seq, matrix3DPtr);
+        cuda_backtrack_3d(m, n, matrix3DPtr, spaceRow, spaceForOtherRow);
+    }
 
     //printMatrix(spaceForOtherRow, 1, n+1);
 }
@@ -174,16 +231,25 @@ void cuda_msa(int BLOCKS, int THREADS, int maxLength, int height, string centerS
     cudaMalloc((void**)&d_spaceForOther, h*soWidth*sizeof(short));
 
 
-    // 设置(可用内存-500M)堆内存的上限
+
+    // 在堆中动态分配matrix所需要的内存（有4GB的上限）
+    // 或者直接分配一个3D的Matrix
     size_t freeMem, totalMem;
+    cudaPitchedPtr matrix3DPtr;
+    if(USE_HEAP) {
+        matrix3DPtr.ptr = NULL;
+        // 设置(可用内存的80%)堆内存的上限
+        cudaMemGetInfo(&freeMem, &totalMem);
+        cudaDeviceSetLimit(cudaLimitMallocHeapSize, freeMem/10*8);
+        allocDeviceMatrix<<<BLOCKS, THREADS>>>(centerSeq.size(), maxLength);
+    } else {
+        cudaExtent matrixSize = make_cudaExtent(sizeof(short) * soWidth, sWidth, SEQUENCES_PER_KERNEL);
+        cudaMalloc3D(&matrix3DPtr, matrixSize);
+    }
     cudaMemGetInfo(&freeMem, &totalMem);
-    cudaDeviceSetLimit(cudaLimitMallocHeapSize, freeMem/10*8);
     printf("freeMem :%luMB, totalMem: %luMB\n", freeMem/1024/1024, totalMem/1024/1024);
 
-    // 在堆中分配matrix所需要的内存
-    allocDeviceMatrix<<<BLOCKS, THREADS>>>(centerSeq.size(), maxLength);
-    cudaMemGetInfo(&freeMem, &totalMem);
-    printf("freeMem :%luMB, totalMem: %luMB\n", freeMem/1024/1024, totalMem/1024/1024);
+
 
     for(int i = 0; i <= height / SEQUENCES_PER_KERNEL; i++) {
         if(i==height/SEQUENCES_PER_KERNEL)
@@ -196,7 +262,7 @@ void cuda_msa(int BLOCKS, int THREADS, int maxLength, int height, string centerS
         cudaMemset(d_space, 0, h*sWidth*sizeof(short));
         cudaMemset(d_spaceForOther, 0, h*soWidth*sizeof(short));
 
-        kernel<<<BLOCKS, THREADS>>>(startIdx, d_centerSeq, d_seqs, d_space, d_spaceForOther, maxLength, height);
+        kernel<<<BLOCKS, THREADS>>>(startIdx, d_centerSeq, d_seqs, matrix3DPtr, d_space, d_spaceForOther, maxLength, height);
         cudaError_t err  = cudaGetLastError();
         if ( cudaSuccess != err )
             printf("Error: %d, %s\n", err, cudaGetErrorString(err));
@@ -209,5 +275,8 @@ void cuda_msa(int BLOCKS, int THREADS, int maxLength, int height, string centerS
     cudaFree(d_spaceForOther);
     cudaFree(d_centerSeq);
     cudaFree(d_seqs);
-    freeDeviceMatrix<<<BLOCKS, THREADS>>>();
+    if(USE_HEAP)
+        freeDeviceMatrix<<<BLOCKS, THREADS>>>();
+    else
+        cudaFree(matrix3DPtr.ptr);
 }
