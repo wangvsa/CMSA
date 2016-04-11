@@ -238,9 +238,10 @@ void cuda_msa(int BLOCKS, int THREADS, int maxLength, int height, string centerS
     cudaPitchedPtr matrix3DPtr;
     if(USE_HEAP) {
         matrix3DPtr.ptr = NULL;
-        // 设置(可用内存的80%)堆内存的上限
+        // 设置(可用内存的80%)堆内存的上限，大于4GB会出错
         cudaMemGetInfo(&freeMem, &totalMem);
-        cudaDeviceSetLimit(cudaLimitMallocHeapSize, freeMem/10*8);
+        size_t heapSize = freeMem/10*8 > 4UL*1024*1024*1024 ? 4UL*1024*1024*1024 : freeMem/10*8;
+        cudaDeviceSetLimit(cudaLimitMallocHeapSize, heapSize);
         allocDeviceMatrix<<<BLOCKS, THREADS>>>(centerSeq.size(), maxLength);
     } else {
         cudaExtent matrixSize = make_cudaExtent(sizeof(short) * soWidth, sWidth, SEQUENCES_PER_KERNEL);
