@@ -177,7 +177,7 @@ void cuda_msa(int BLOCKS, int THREADS, int maxLength, int height, string centerS
     // 设置(可用内存-500M)堆内存的上限
     size_t freeMem, totalMem;
     cudaMemGetInfo(&freeMem, &totalMem);
-    cudaDeviceSetLimit(cudaLimitMallocHeapSize, freeMem*0.8);
+    cudaDeviceSetLimit(cudaLimitMallocHeapSize, freeMem/10*8);
     printf("freeMem :%luMB, totalMem: %luMB\n", freeMem/1024/1024, totalMem/1024/1024);
 
     // 在堆中分配matrix所需要的内存

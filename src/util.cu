@@ -95,7 +95,7 @@ bool configureKernel(int centerSeqLength, int maxLength, unsigned long sumLength
 
     // 得到每个Kernel可以执行的串数（即可并发的总线程数BLOCKS*THREADS）
     // 不应该使用所有的空闲内存，在此留出一部分20%
-    freeMem = (freeMem - sizeof(char) * sumLength) * 0.8;
+    freeMem = (freeMem - sizeof(char) * sumLength) / 10 * 8;        // *0.8中间会转成double有可能截短
     int seqs = freeMem / matrixSize;
 
     printf("freeMem: %luMB, sumLengthSize: %luMB, matrix :%luKB, seqs: %d\n", freeMem/1024/1024, sumLength/1024/1024, matrixSize/1024, seqs);
