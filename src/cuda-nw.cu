@@ -165,7 +165,7 @@ void cuda_backtrack_3d(int m, int n, cudaPitchedPtr matrix3DPtr, short *spaceRow
 
 
 __global__
-void kernel(int startIdx, char *centerSeq, char *seqs, cudaPitchedPtr matrix3DPtr, short *space, short *spaceForOther, int maxLength, int totalSequences) {
+void kernel(int startIdx, char *centerSeq, char *seqs, int centerSeqLength, int *seqsSize, cudaPitchedPtr matrix3DPtr, short *space, short *spaceForOther, int maxLength, int totalSequences) {
 
     int tid = get_tid;
     int seqIdx = tid + startIdx;
@@ -175,8 +175,10 @@ void kernel(int startIdx, char *centerSeq, char *seqs, cudaPitchedPtr matrix3DPt
     int width = maxLength + 1;
     char *seq = seqs + width * seqIdx;
 
-    int m = cuda_strlen(centerSeq);
-    int n = cuda_strlen(seq);
+    //int m = cuda_strlen(centerSeq);
+    //int n = cuda_strlen(seq);
+    int m = centerSeqLength;
+    int n = seqsSize[seqIdx];
 
     // 当前匹配的字符串所需要填的空格数组的位置
     short *spaceRow = space + tid * (m+1);
@@ -219,6 +221,16 @@ void cuda_msa(int BLOCKS, int THREADS, int maxLength, int height, string centerS
     cudaMemcpy(d_seqs, c_seqs, soWidth*height*sizeof(char), cudaMemcpyHostToDevice);
     delete[] c_seqs;
 
+
+    int *seqsSize = new int[seqs.size()];
+    for(int i = 0; i < seqs.size(); i++)
+        seqsSize[i] = seqs[i].size();
+    int *d_seqsSize;
+    cudaMalloc((void**)&d_seqsSize, sizeof(int)*seqs.size());
+    cudaMemcpy(d_seqsSize, seqsSize, sizeof(int)*seqs.size(), cudaMemcpyHostToDevice);
+    delete[] seqsSize;
+
+
     // d_space, d_spaceForOther 是循环利用的
     // 每个kernel计算SEQUENCES_PER_KERNEL条串
     int SEQUENCES_PER_KERNEL = BLOCKS * THREADS;
@@ -229,7 +241,6 @@ void cuda_msa(int BLOCKS, int THREADS, int maxLength, int height, string centerS
     short *d_spaceForOther;
     cudaMalloc((void**)&d_space, h*sWidth*sizeof(short));
     cudaMalloc((void**)&d_spaceForOther, h*soWidth*sizeof(short));
-
 
 
     // 在堆中动态分配matrix所需要的内存（有4GB的上限）
@@ -263,7 +274,7 @@ void cuda_msa(int BLOCKS, int THREADS, int maxLength, int height, string centerS
         cudaMemset(d_space, 0, h*sWidth*sizeof(short));
         cudaMemset(d_spaceForOther, 0, h*soWidth*sizeof(short));
 
-        kernel<<<BLOCKS, THREADS>>>(startIdx, d_centerSeq, d_seqs, matrix3DPtr, d_space, d_spaceForOther, maxLength, height);
+        kernel<<<BLOCKS, THREADS>>>(startIdx, d_centerSeq, d_seqs, centerSeq.size(), d_seqsSize, matrix3DPtr, d_space, d_spaceForOther, maxLength, height);
         cudaError_t err  = cudaGetLastError();
         if ( cudaSuccess != err )
             printf("Error: %d, %s\n", err, cudaGetErrorString(err));
