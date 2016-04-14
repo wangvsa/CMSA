@@ -30,7 +30,9 @@ void init(const char *path) {
     seqs = readFastaFile(path);
 
     // 找出中心串
+    double start = omp_get_wtime();
     int centerSeqIdx = findCenterSequence(seqs);
+    double end = omp_get_wtime();
 
     centerSeq = seqs[0];
     seqs.erase(seqs.begin() + centerSeqIdx);
@@ -60,6 +62,7 @@ void init(const char *path) {
     printf("Workload Ratio of GPU/CPU: %d:%d\n", (MODE==GPU_ONLY)?WORKLOAD_RATIO:0, (MODE==GPU_ONLY)?0:1);
     printf("Block Size: %d, Thread Size: %d\n", BLOCKS, THREADS);
     printf("=========================================\n\n");
+    printf("Find the Center Sequence, use time: %f\n", end-start);
 }
 
 /**
