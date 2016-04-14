@@ -24,23 +24,23 @@ int cpu_max(int v1, int v2, int v3) {
 short** nw(string str1, string str2) {
 
     // m行, n列
-    int m = str1.size() + 1;
-    int n = str2.size() + 1;
+    int m = str1.size();
+    int n = str2.size();
 
     // 直接定义二维数组，比使用vector<vector>的形式节省内存
     // 缺点是需要自己管理内存释放
-    short **matrix = new short*[m];
-    for(int i = 0; i < m; i++)
-        matrix[i] = new short[n];
+    short **matrix = new short*[m+1];
+    for(int i = 0; i <= m; i++)
+        matrix[i] = new short[n+1];
 
     // 初始化矩阵
-    for(int i=0;i<n;i++)
-        matrix[0][i] = i * MISMATCH;
-    for(int i=0;i<m;i++)
+    for(int j = 0; j <= n; j++)
+        matrix[0][j] = j * MISMATCH;
+    for(int i = 0; i <= m; i++)
         matrix[i][0] = i * MISMATCH;
 
-    for(int i=1;i<m;i++) {
-        for(int j=1;j<n;j++) {
+    for(int i = 1; i <= m; i++) {
+        for(int j = 1; j <= n; j++) {
             int up = matrix[i-1][j] + GAP;
             int left = matrix[i][j-1] + GAP;
             int diag = matrix[i-1][j-1] + ((str1[i-1]==str2[j-1])?MATCH:MISMATCH);
@@ -54,11 +54,8 @@ short** nw(string str1, string str2) {
 }
 
 void backtrack(short **matrix, string centerSeq, string seq, int seqIdx, short *space, short *spaceForOther, int maxLength) {
-    string str1 = centerSeq;
-    string str2 = seq;
-
-    int m = str1.size();
-    int n = str2.size();
+    int m = centerSeq.size();
+    int n = seq.size();
 
     int sWidth = m + 1;
     int soWidth = maxLength + 1;
@@ -81,7 +78,7 @@ void backtrack(short **matrix, string centerSeq, string seq, int seqIdx, short *
     }
 
     // 释放matrix[(m+1, n+1]内存
-    for(int i=0; i<=m; i++)
+    for(int i = 0; i <= m; i++)
         delete[] matrix[i];
     delete[] matrix;
 }
