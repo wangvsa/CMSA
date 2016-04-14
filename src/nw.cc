@@ -53,9 +53,9 @@ short** nw(string str1, string str2) {
     return matrix;
 }
 
-void backtrack(short **matrix, string centerSeq, vector<string> seqs, int seqIdx, short *space, short *spaceForOther, int maxLength) {
+void backtrack(short **matrix, string centerSeq, string seq, int seqIdx, short *space, short *spaceForOther, int maxLength) {
     string str1 = centerSeq;
-    string str2 = seqs[seqIdx];
+    string str2 = seq;
 
     int m = str1.size();
     int n = str2.size();
@@ -97,7 +97,7 @@ void cpu_msa(string centerSeq, vector<string> seqs, int startIdx, short *space, 
     #pragma omp parallel for
     for(int idx = startIdx; idx < seqs.size(); idx++) {
         short **matrix = nw(centerSeq, seqs[idx]);
-        backtrack(matrix, centerSeq, seqs, idx, space, spaceForOther, maxLength);
+        backtrack(matrix, centerSeq, seqs[idx], idx, space, spaceForOther, maxLength);
         printf("%d/%lu, sequence length:%lu\n", idx+1, seqs.size(), seqs[idx].size());
     }
 
