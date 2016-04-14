@@ -10,16 +10,21 @@ using namespace std;
 
 vector<string> readFastaFile(const char *path) {
     vector<string> sequences;
-    string buff;
+    string buff, line;
 
     ifstream file;
     file.open(path);
     assert(file);
 
     while(getline(file, buff)) {
-        if(buff[0] == '>')
+        if(buff.empty() || buff[0] == '>') {
+            if(!line.empty())
+                sequences.push_back(line);
+            line = "";
             continue;
-        sequences.push_back(buff);
+        } else {
+            line += buff;
+        }
     }
 
     file.close();
