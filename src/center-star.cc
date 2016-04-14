@@ -7,6 +7,7 @@ using namespace std;
 
 /**
  * 将8 char = 16 bits 转换成一个整数作为下标
+ * 若遇到不识别的字母直接返回-1
  */
 int charsToIndex(const char *str) {
     bitset<16> bits(0x0000);
@@ -25,6 +26,8 @@ int charsToIndex(const char *str) {
                 bits[i*2] = 1;
                 bits[i*2+1] = 1;
                 break;
+            default:        // 遇到不识别的字母，比如N,X等
+                return -1;
         }
     }
     return (int) (bits.to_ulong());
@@ -41,7 +44,7 @@ void setOccVector(const char *str, int *vec) {
     int n = len / 8;
     for(int i=0;i<n;i++) {
         int index = charsToIndex(str+i*8);
-        if(!flag[index]) {
+        if(index>=0 && !flag[index]) {
             vec[index]++;
             flag[index] = true;
         }
@@ -59,7 +62,8 @@ int countSequences(const char *str, int *vec) {
     int count = 0;
     for(int i=0;i<n;i++) {
         int index = charsToIndex(str+i*8);
-        count += vec[index];
+        if(index >= 0)
+            count += vec[index];
     }
 
     return count;

@@ -98,7 +98,7 @@ void cpu_msa(string centerSeq, vector<string> seqs, int startIdx, short *space, 
     for(int idx = startIdx; idx < seqs.size(); idx++) {
         short **matrix = nw(centerSeq, seqs[idx]);
         backtrack(matrix, centerSeq, seqs, idx, space, spaceForOther, maxLength);
-        //printf("%d/%lu, sequence length:%lu\n", idx+1, seqs.size(), seqs[idx].size());
+        printf("%d/%lu, sequence length:%lu\n", idx+1, seqs.size(), seqs[idx].size());
     }
 
 }
