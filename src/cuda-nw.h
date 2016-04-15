@@ -4,8 +4,11 @@
 #include <string>
 
 /**
- * height 在GPU上计算的串数
+ * workCount    负责计算的序列数目
+ * centerSeq    中心串
+ * seqs         除中心串外的所有串
+ * maxLength    最长串的长度
  */
-void cuda_msa(int BLOCKS, int THREADS, int maxLength, int height, std::string centerSeq, std::vector<std::string> seqs, short *space, short *spaceForOther);
+void cuda_msa(int workCount, std::string centerSeq, std::vector<std::string> seqs, int maxLength, short *space, short *spaceForOther);
 
 #endif

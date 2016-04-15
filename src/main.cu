@@ -139,11 +139,11 @@ int main(int argc, char *argv[]) {
 
 
     // 根据用户需要运行的模式来分配工作量
-    int height = seqs.size() / (WORKLOAD_RATIO+1) * WORKLOAD_RATIO;     // GPU部分任务量
+    int workCount = seqs.size() / (WORKLOAD_RATIO+1) * WORKLOAD_RATIO;     // GPU部分任务量
     if( MODE == GPU_ONLY )
-        height = seqs.size();
+        workCount = seqs.size();
     if( MODE == CPU_ONLY )
-        height = 0;
+        workCount = 0;
 
     omp_set_nested(1);      // 设置允许嵌套并行，在cpu_msa中使用了parallel for
     double start = omp_get_wtime();
@@ -154,7 +154,7 @@ int main(int argc, char *argv[]) {
     {
         if( MODE != CPU_ONLY ) {
             double start = omp_get_wtime();
-            cuda_msa(BLOCKS, THREADS, maxLength, height, centerSeq, seqs, space, spaceForOther);
+            cuda_msa(workCount, centerSeq, seqs, maxLength, space, spaceForOther);
             double end = omp_get_wtime();
             printf("GPU DP calulation, use time: %f\n", end-start);
         }
@@ -164,7 +164,7 @@ int main(int argc, char *argv[]) {
     {
         if( MODE != GPU_ONLY ) {
             double start = omp_get_wtime();
-            cpu_msa(centerSeq, seqs, height, space, spaceForOther, maxLength);
+            cpu_msa(centerSeq, seqs, workCount, space, spaceForOther, maxLength);
             double end = omp_get_wtime();
             printf("CPU DP calulation, use time: %f\n", end-start);
         }

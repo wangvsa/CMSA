@@ -198,8 +198,8 @@ void kernel(int startIdx, char *centerSeq, char *seqs, int centerSeqLength, int 
 }
 
 
-void cuda_msa(int BLOCKS, int THREADS, int maxLength, int height, string centerSeq, vector<string> seqs, short *space, short *spaceForOther) {
-    if(height <= 0) return;
+void cuda_msa(int workCount, string centerSeq, vector<string> seqs, int maxLength, short *space, short *spaceForOther) {
+    if(workCount<= 0) return;
 
     int sWidth = centerSeq.size() + 1;      // d_space的宽度
     int soWidth = maxLength + 1;            // d_spaceForOther的宽度
@@ -212,13 +212,13 @@ void cuda_msa(int BLOCKS, int THREADS, int maxLength, int height, string centerS
     cudaMalloc((void**)&d_centerSeq, sWidth * sizeof(char));
     cudaMemcpy(d_centerSeq, centerSeq.c_str(), sWidth *sizeof(char), cudaMemcpyHostToDevice);
     char *d_seqs;
-    cudaMalloc((void**)&d_seqs, soWidth*height*sizeof(char));
-    char *c_seqs = new char[(maxLength+1) * height];
-    for(int i=0;i<height;i++) {
+    cudaMalloc((void**)&d_seqs, soWidth*workCount*sizeof(char));
+    char *c_seqs = new char[(maxLength+1) * workCount];
+    for(int i=0;i<workCount;i++) {
         char *p = &(c_seqs[i * (maxLength + 1)]);
         strcpy(p, seqs[i].c_str());
     }
-    cudaMemcpy(d_seqs, c_seqs, soWidth*height*sizeof(char), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_seqs, c_seqs, soWidth*workCount*sizeof(char), cudaMemcpyHostToDevice);
     delete[] c_seqs;
 
 
@@ -234,7 +234,7 @@ void cuda_msa(int BLOCKS, int THREADS, int maxLength, int height, string centerS
     // d_space, d_spaceForOther 是循环利用的
     // 每个kernel计算SEQUENCES_PER_KERNEL条串
     int SEQUENCES_PER_KERNEL = BLOCKS * THREADS;
-    int h = height < SEQUENCES_PER_KERNEL ? height : SEQUENCES_PER_KERNEL;
+    int h = workCount < SEQUENCES_PER_KERNEL ? workCount : SEQUENCES_PER_KERNEL;
 
     // 每条串一个空格数组
     short *d_space;
@@ -263,9 +263,9 @@ void cuda_msa(int BLOCKS, int THREADS, int maxLength, int height, string centerS
 
 
 
-    for(int i = 0; i <= height / SEQUENCES_PER_KERNEL; i++) {
-        if(i==height/SEQUENCES_PER_KERNEL)
-            h = height % SEQUENCES_PER_KERNEL;
+    for(int i = 0; i <= workCount / SEQUENCES_PER_KERNEL; i++) {
+        if(i==workCount/SEQUENCES_PER_KERNEL)
+            h = workCount % SEQUENCES_PER_KERNEL;
 
         // 此次kernel计算的起始串的位置
         int startIdx = i * SEQUENCES_PER_KERNEL;
@@ -274,7 +274,7 @@ void cuda_msa(int BLOCKS, int THREADS, int maxLength, int height, string centerS
         cudaMemset(d_space, 0, h*sWidth*sizeof(short));
         cudaMemset(d_spaceForOther, 0, h*soWidth*sizeof(short));
 
-        kernel<<<BLOCKS, THREADS>>>(startIdx, d_centerSeq, d_seqs, centerSeq.size(), d_seqsSize, matrix3DPtr, d_space, d_spaceForOther, maxLength, height);
+        kernel<<<BLOCKS, THREADS>>>(startIdx, d_centerSeq, d_seqs, centerSeq.size(), d_seqsSize, matrix3DPtr, d_space, d_spaceForOther, maxLength, workCount);
         cudaError_t err  = cudaGetLastError();
         if ( cudaSuccess != err )
             printf("Error: %d, %s\n", err, cudaGetErrorString(err));
