@@ -57,6 +57,8 @@ void freeDeviceMatrix() {
 
 
 /**
+  * m               in, 中心串长度
+  * n               in, 对比串长度
   * centerSeq       in, 中心串
   * seqs            in, 其他n-1条串
   * seqIdx          in, 要被计算的串的编号
