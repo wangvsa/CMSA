@@ -1,8 +1,12 @@
 #include <stdio.h>
+#include <limits>
 #include "omp.h"
 #include "nw.h"
 #include "global.h"
 using namespace std;
+
+//#define MIN_SCORE numeric_limits<short>::min()
+#define MIN_SCORE -32700
 
 
 void printMatrix(short **matrix, int m, int n) {
@@ -32,24 +36,61 @@ short** nw(string str1, string str2) {
     short **matrix = new short*[m+1];
     for(int i = 0; i <= m; i++)
         matrix[i] = new short[n+1];
+    short **x_matrix = new short*[m+1];         // gap in str1
+    for(int i = 0; i <= m; i++)
+        x_matrix[i] = new short[n+1];
+    short **y_matrix = new short*[m+1];         // gap in str2
+    for(int i = 0; i <= m; i++)
+        y_matrix[i] = new short[n+1];
 
     // 初始化矩阵
-    for(int j = 0; j <= n; j++)
-        matrix[0][j] = j * MISMATCH;
-    for(int i = 0; i <= m; i++)
-        matrix[i][0] = i * MISMATCH;
+    for(int j = 0; j <= n; j++) {
+        //matrix[0][j] = j * MISMATCH;
+        matrix[0][j] = MIN_SCORE;
+        x_matrix[0][j] = GAP_START + j * GAP_EXTEND;
+        y_matrix[0][j] = MIN_SCORE;
+    }
+    for(int i = 0; i <= m; i++) {
+        //matrix[i][0] = i * MISMATCH;
+        matrix[i][0] = MIN_SCORE;
+        x_matrix[i][0] = MIN_SCORE;
+        y_matrix[i][0] = GAP_START + i * GAP_EXTEND;
+    }
+    matrix[0][0] = 0;
+
 
     for(int i = 1; i <= m; i++) {
         for(int j = 1; j <= n; j++) {
+            /*
             int up = matrix[i-1][j] + GAP;
             int left = matrix[i][j-1] + GAP;
             int diag = matrix[i-1][j-1] + ((str1[i-1]==str2[j-1])?MATCH:MISMATCH);
-
             matrix[i][j] = cpu_max(up, left, diag);
+            */
+
+            x_matrix[i][j] = cpu_max(
+                    GAP_START+GAP_EXTEND+matrix[i][j-1],
+                    GAP_EXTEND+x_matrix[i][j-1]);
+                    //GAP_START+GAP_EXTEND+y_matrix[i][j-1]);
+            y_matrix[i][j] = cpu_max(
+                    GAP_START+GAP_EXTEND+matrix[i-1][j],
+                    //GAP_START+GAP_EXTEND+x_matrix[i-1][j],
+                    GAP_EXTEND+y_matrix[i-1][j]);
+
+            short score = (str1[i-1]==str2[j-1] ? MATCH : MISMATCH) + matrix[i-1][j-1];
+            matrix[i][j] = cpu_max(score, x_matrix[i][j], y_matrix[i][j]);
         }
     }
 
     // printMatrix(matrix, m, n);
+    // 释放x_matrix和y_matrix, matrix在backtrack中释放
+    for(int i = 0; i <= m; i++) {
+        delete[] x_matrix[i];
+        delete[] y_matrix[i];
+    }
+    delete[] x_matrix;
+    delete[] y_matrix;
+
     return matrix;
 }
 
@@ -60,6 +101,7 @@ void backtrack(short **matrix, string centerSeq, string seq, int seqIdx, short *
     int sWidth = m + 1;
     int soWidth = maxLength + 1;
 
+    /*
     // 从(m, n) 遍历到 (0, 0)
     int i = m, j = n;           // DP矩阵的纬度是m+1, n+1
     while(i!=0 || j!=0) {
@@ -75,6 +117,32 @@ void backtrack(short **matrix, string centerSeq, string seq, int seqIdx, short *
             i--;
             j--;
         }
+    }
+    */
+
+    int i = m, j = n;
+    while(i!=0 || j!=0) {
+        int score = (centerSeq[i-1] == seq[j-1]) ? MATCH : MISMATCH;
+        if(i>0 && j>0 && score+matrix[i-1][j-1]==matrix[i][j]) {
+            i--;
+            j--;
+        } else {
+            int k = 1;
+            while(true) {
+                if(i>=k && matrix[i][j]==matrix[i-k][j]+GAP_START+GAP_EXTEND*k) {
+                    spaceForOther[seqIdx*soWidth+j] += k;
+                    i = i - k;
+                    break;
+                } else if(j>=k && matrix[i][j]==matrix[i][j-k]+GAP_START+GAP_EXTEND*k) {
+                    space[seqIdx*sWidth+i] += k;
+                    j = j - k;
+                    break;
+                } else {
+                    k++;
+                }
+            }
+        }
+
     }
 
     // 释放matrix[(m+1, n+1]内存

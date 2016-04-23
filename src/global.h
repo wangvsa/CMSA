@@ -8,6 +8,8 @@
 #define MISMATCH -1
 #define MATCH 0
 #define GAP -1
+#define GAP_START -4
+#define GAP_EXTEND -2
 
 #define MAX_THREADS 1024
 #define MAX_BLOCKS 128
