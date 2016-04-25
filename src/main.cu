@@ -15,8 +15,8 @@ using namespace std;
  * seqs 存储所有其他串
  */
 string centerSeq;
-vector<string> seqs;
-int maxLength;      // 最长的串的长度
+vector<string> seqs;    // 所有串
+int maxLength;          // 最长的串的长度
 
 
 /**

@@ -37,7 +37,10 @@ void writeFastaFile(const char* path, vector<string> strs) {
     if(file.is_open()) {
         for(int i=0;i<strs.size();i++) {
             file<<">"<<i<<endl;
-            file<<strs[i]<<endl;
+            int lines = strs[i].size() / 60;        // 60个字符一行
+            lines = strs[i].size() % 60 == 0 ? lines : lines+1;
+            for(int k = 0; k < lines; k++)
+                file<<strs[i].substr(k*60, 60)<<endl;
         }
     }
 
