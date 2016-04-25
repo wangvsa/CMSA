@@ -3,6 +3,13 @@
 #include <vector>
 #include <string>
 
+typedef struct DPCell_t {
+    short score;
+    short x_gap;
+    short y_gap;
+} DPCell;
+
+
 /**
  * workCount    负责计算的序列数目
  * centerSeq    中心串

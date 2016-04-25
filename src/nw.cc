@@ -1,12 +1,9 @@
 #include <stdio.h>
-#include <limits>
 #include "omp.h"
 #include "nw.h"
 #include "global.h"
 using namespace std;
 
-//#define MIN_SCORE numeric_limits<short>::min()
-#define MIN_SCORE -32700
 
 
 void printMatrix(short **matrix, int m, int n) {

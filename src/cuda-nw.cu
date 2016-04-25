@@ -23,7 +23,11 @@ void printMatrix(short *matrix, int m, int n) {
 }
 
 __device__
-int max(int v1, int v2, int v3) {
+short max(short v1, short v2) {
+    return v1 > v2 ? v1 : v2;
+}
+__device__
+short max(short v1, short v2, short v3) {
     return max(max(v1, v2), v3);
 }
 
@@ -74,9 +78,9 @@ void cuda_nw(int m, int n, char *centerSeq, char *seq, short*matrix, int width) 
 
     for(int i=1;i<=m;i++) {
         for(int j=1;j<=n;j++) {
-            int up = matrix[(i-1)*width+j] + GAP;           // matrix[i-1][j]
-            int left = matrix[i*width+j-1] + GAP;           // matrix[i][j-1]
-            int diag = matrix[(i-1)*width+j-1] + ((centerSeq[i-1]==seq[j-1])?MATCH:MISMATCH);      // matrix[i-1][j-1]
+            short up = matrix[(i-1)*width+j] + GAP;           // matrix[i-1][j]
+            short left = matrix[i*width+j-1] + GAP;           // matrix[i][j-1]
+            short diag = matrix[(i-1)*width+j-1] + ((centerSeq[i-1]==seq[j-1])?MATCH:MISMATCH);      // matrix[i-1][j-1]
             matrix[i*width+j] = max(up, left, diag);
         }
     }
@@ -89,24 +93,33 @@ void cuda_nw_3d(int m, int n, char *centerSeq, char *seq, cudaPitchedPtr matrix3
     char *slice = (char *)matrix3DPtr.ptr + get_tid * slicePitch;
 
     // 初始化矩阵, DP矩阵m+1行,n+1列
-    short *matrixRow;
+    DPCell *matrixRow;
     for(int i=0;i<=m;i++) {
-        matrixRow = (short *)(slice + i * matrix3DPtr.pitch);
-        matrixRow[0] = i * MISMATCH;   // matrix[i][0]
+        matrixRow = (DPCell *)(slice + i * matrix3DPtr.pitch);
+        matrixRow[0].score = MIN_SCORE;   // matrix[i][0]
+        matrixRow[0].x_gap = MIN_SCORE;
+        matrixRow[0].y_gap = GAP_START + i * GAP_EXTEND;
     }
-    matrixRow = (short *)(slice + 0 * matrix3DPtr.pitch);
+    matrixRow = (DPCell *)(slice + 0 * matrix3DPtr.pitch);
     for(int j=0;j<=n;j++) {
-        matrixRow[j] = j * MISMATCH;   // matrix[0][j];
+        matrixRow[j].score = MIN_SCORE;   // matrix[0][j];
+        matrixRow[j].x_gap = GAP_START + j * GAP_EXTEND;
+        matrixRow[j].y_gap = MIN_SCORE;
     }
+    matrixRow[0].score = 0;             // matrix[0][0]
 
     for(int i=1;i<=m;i++) {
-        short *matrixLastRow = (short *)(slice + (i-1) * matrix3DPtr.pitch);
-        short *matrixRow = (short *)(slice + i * matrix3DPtr.pitch);
+        DPCell *matrixLastRow = (DPCell *)(slice + (i-1) * matrix3DPtr.pitch);
+        DPCell *matrixRow = (DPCell *)(slice + i * matrix3DPtr.pitch);
         for(int j=1;j<=n;j++) {
-            int up = matrixLastRow[j] + GAP;                                                // matrix[i-1][j]
-            int left = matrixRow[j-1] + GAP;                                                // matrix[i][j-1]
-            int diag = matrixLastRow[j-1] + ((centerSeq[i-1]==seq[j-1])?MATCH:MISMATCH);    // matrix[i-1][j-1]
-            matrixRow[j] = max(up, left, diag);
+            //int up = matrixLastRow[j] + GAP;                                                // matrix[i-1][j]
+            //int left = matrixRow[j-1] + GAP;                                                // matrix[i][j-1]
+            short x_gap = max(GAP_START+GAP_EXTEND+matrixRow[j-1].score, GAP_EXTEND+matrixRow[j-1].x_gap);
+            short y_gap = max(GAP_START+GAP_EXTEND+matrixLastRow[j].score, GAP_EXTEND+matrixLastRow[j].y_gap);
+            short score = matrixLastRow[j-1].score + ((centerSeq[i-1]==seq[j-1])?MATCH:MISMATCH);    // matrix[i-1][j-1]
+            matrixRow[j].x_gap = x_gap;
+            matrixRow[j].y_gap = y_gap;
+            matrixRow[j].score = max(x_gap, y_gap, score);
         }
     }
 }
@@ -140,12 +153,13 @@ void cuda_backtrack(int m, int n, short* matrix, short *spaceRow, short *spaceFo
     }
 }
 __device__
-void cuda_backtrack_3d(int m, int n, cudaPitchedPtr matrix3DPtr, short *spaceRow, short *spaceForOtherRow) {
+void cuda_backtrack_3d(int m, int n, char *centerSeq, char *seq, cudaPitchedPtr matrix3DPtr, short *spaceRow, short *spaceForOtherRow) {
     size_t slicePitch = matrix3DPtr.pitch * (m+1);
     char *slice = (char *)matrix3DPtr.ptr + get_tid * slicePitch;
 
     // 从(m, n) 遍历到 (0, 0)
     // DP矩阵的纬度是m+1, n+1
+    /*
     int i = m, j = n;
     while(i!=0 || j!=0) {
         short *matrixLastRow = (short *)(slice + (i-1) * matrix3DPtr.pitch);
@@ -163,6 +177,35 @@ void cuda_backtrack_3d(int m, int n, cudaPitchedPtr matrix3DPtr, short *spaceRow
             j--;
         }
     }
+    */
+
+    int i = m, j = n;
+    while(i!=0 || j!=0) {
+        DPCell *matrixRow = (DPCell *)(slice + i * matrix3DPtr.pitch);
+        DPCell *matrixLastRow = (DPCell *)(slice + (i-1) * matrix3DPtr.pitch);
+        int score = (centerSeq[i-1] == seq[j-1]) ? MATCH : MISMATCH;
+        if(i>0 && j>0 && score+matrixLastRow[j-1].score == matrixRow[j].score) {
+            i--;
+            j--;
+        } else {
+            int k = 1;
+            while(true) {
+                DPCell *matrixLastKRow = (DPCell *)(slice + (i-k) * matrix3DPtr.pitch);
+                if(i>=k && matrixRow[j].score == matrixLastKRow[j].score+GAP_START+GAP_EXTEND*k) {
+                    spaceForOtherRow[j] += k;
+                    i = i - k;
+                    break;
+                } else if(j>=k && matrixRow[j].score == matrixRow[j-k].score+GAP_START+GAP_EXTEND*k) {
+                    spaceRow[i] += k;
+                    j = j - k;
+                    break;
+                } else {
+                    k++;
+                }
+            }
+        }
+    }
+
 }
 
 
@@ -193,7 +236,7 @@ void kernel(int startIdx, char *centerSeq, char *seqs, int centerSeqLength, int 
         cuda_backtrack(m, n, matrix, spaceRow, spaceForOtherRow, width);
     } else {
         cuda_nw_3d(m, n, centerSeq, seq, matrix3DPtr);
-        cuda_backtrack_3d(m, n, matrix3DPtr, spaceRow, spaceForOtherRow);
+        cuda_backtrack_3d(m, n,centerSeq, seq, matrix3DPtr, spaceRow, spaceForOtherRow);
     }
 
     //printMatrix(spaceForOtherRow, 1, n+1);
@@ -257,7 +300,7 @@ void cuda_msa(int workCount, string centerSeq, vector<string> seqs, int maxLengt
         cudaDeviceSetLimit(cudaLimitMallocHeapSize, heapSize);
         allocDeviceMatrix<<<BLOCKS, THREADS>>>(centerSeq.size(), maxLength);
     } else {
-        cudaExtent matrixSize = make_cudaExtent(sizeof(short) * soWidth, sWidth, SEQUENCES_PER_KERNEL);
+        cudaExtent matrixSize = make_cudaExtent(sizeof(DPCell) * soWidth, sWidth, SEQUENCES_PER_KERNEL);
         cudaMalloc3D(&matrix3DPtr, matrixSize);
     }
     cudaMemGetInfo(&freeMem, &totalMem);

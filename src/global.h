@@ -14,6 +14,8 @@
 #define MAX_THREADS 1024
 #define MAX_BLOCKS 128
 
+#define MIN_SCORE -32700
+
 
 // 每个Kernel中的Block数量
 extern int BLOCKS;
