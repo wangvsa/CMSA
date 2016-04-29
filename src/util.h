@@ -5,15 +5,20 @@
 #include <iostream>
 #include <cuda.h>
 
+typedef struct FastaSeqs_t {
+    std::vector<std::string> titles;
+    std::vector<std::string> seqs;
+} FastaSeqs;
+
 /**
  * 读入Fasta格式的文件
  */
-std::vector<std::string> readFastaFile(const char *path);
+FastaSeqs readFastaFile(const char *path);
 
 /**
  * 将MSA的结果写入到Fasta格式文件
  */
-void writeFastaFile(const char *path, std::vector<std::string> strs);
+void writeFastaFile(const char *path, std::vector<std::string> titles, std::vector<std::string> alignedSeqs);
 
 /**
  * 解析main函数的参数，设置全局变量

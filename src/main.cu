@@ -15,8 +15,10 @@ using namespace std;
  * seqs 存储所有其他串
  */
 string centerSeq;
+vector<string> titles;
 vector<string> seqs;    // 所有串
 int maxLength;          // 最长的串的长度
+int centerSeqIdx;
 
 
 /**
@@ -27,14 +29,16 @@ void init(const char *path) {
     // 读入所有字符串
     // centerSeq, 图中的纵向，决定了行数m
     // seqs[idx], 图中的横向，决定了列数n
-    seqs = readFastaFile(path);
+    FastaSeqs fastaSeqs = readFastaFile(path);
+    titles = fastaSeqs.titles;
+    seqs = fastaSeqs.seqs;
 
     // 找出中心串
     double start = omp_get_wtime();
-    int centerSeqIdx = findCenterSequence(seqs);
+    centerSeqIdx = findCenterSequence(seqs);
     double end = omp_get_wtime();
 
-    centerSeq = seqs[0];
+    centerSeq = seqs[centerSeqIdx];
     seqs.erase(seqs.begin() + centerSeqIdx);
 
     unsigned long sumLength = 0;
@@ -92,7 +96,7 @@ void output(short *space, short *spaceForOther, const char* path) {
     }
 
     //printf("\n\n%s\n", alignedCenter.c_str());
-    allAlignedStrs.push_back(alignedCenter);
+    //allAlignedStrs.push_back(alignedCenter);
 
     for(int idx = 0; idx < seqs.size(); idx++) {
         int shift = 0;
@@ -113,10 +117,11 @@ void output(short *space, short *spaceForOther, const char* path) {
         //printf("%s\n", alignedStr.c_str());
         allAlignedStrs.push_back(alignedStr);
     }
+    allAlignedStrs.insert(allAlignedStrs.begin()+centerSeqIdx, alignedCenter);
 
     // 将结果写入文件
     printf("write to the output file.\n");
-    writeFastaFile(path, allAlignedStrs);
+    writeFastaFile(path, titles, allAlignedStrs);
 }
 
 

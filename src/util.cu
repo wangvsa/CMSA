@@ -8,9 +8,10 @@
 #include "global.h"
 using namespace std;
 
-vector<string> readFastaFile(const char *path) {
-    vector<string> sequences;
-    string buff, line;
+FastaSeqs readFastaFile(const char *path) {
+    vector<string> titles;
+    vector<string> seqs;
+    string buff, line, title;
 
     ifstream file;
     file.open(path);
@@ -18,8 +19,12 @@ vector<string> readFastaFile(const char *path) {
 
     while(getline(file, buff)) {
         if(buff.empty() || buff[0] == '>') {
-            if(!line.empty())
-                sequences.push_back(line);
+            if(!line.empty()) {
+                seqs.push_back(line);
+                titles.push_back(title);
+            }
+            if(buff[0] == '>')
+                title = buff;
             line = "";
             continue;
         } else {
@@ -28,19 +33,20 @@ vector<string> readFastaFile(const char *path) {
     }
 
     file.close();
-    return sequences;
+    FastaSeqs fastaSeqs = {titles, seqs};
+    return fastaSeqs;
 }
 
 
-void writeFastaFile(const char* path, vector<string> strs) {
+void writeFastaFile(const char* path, vector<string> titles, vector<string> alignedSeqs) {
     ofstream file(path);
     if(file.is_open()) {
-        for(int i=0;i<strs.size();i++) {
-            file<<">"<<i<<endl;
-            int lines = strs[i].size() / 60;        // 60个字符一行
-            lines = strs[i].size() % 60 == 0 ? lines : lines+1;
+        for(int i=0;i<alignedSeqs.size();i++) {
+            file<<titles[i]<<endl;
+            int lines = alignedSeqs[i].size() / 60;        // 60个字符一行
+            lines = alignedSeqs[i].size() % 60 == 0 ? lines : lines+1;
             for(int k = 0; k < lines; k++)
-                file<<strs[i].substr(k*60, 60)<<endl;
+                file<<alignedSeqs[i].substr(k*60, 60)<<endl;
         }
     }
 

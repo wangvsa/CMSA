@@ -9,6 +9,6 @@
  * startIdx     开始执行的串编号o
  * maxLength    最长串的长度
  */
-void cpu_msa(std::string centerSeq, std::vector<std:: string> seqs, int startIdx, short *space, short *spaceForOther, int maxLength);
+void cpu_msa(std::string centerSeq, std::vector<std::string> seqs, int startIdx, short *space, short *spaceForOther, int maxLength);
 
 #endif
