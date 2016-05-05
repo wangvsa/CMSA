@@ -314,7 +314,7 @@ void cuda_msa(int workCount, string centerSeq, vector<string> seqs, int maxLengt
 
         // 此次kernel计算的起始串的位置
         int startIdx = i * SEQUENCES_PER_KERNEL;
-        printf("%d. startIdx: %d, h: %d\n", i, startIdx, h);
+       // printf("%d. startIdx: %d, h: %d\n", i, startIdx, h);
 
         cudaMemset(d_space, 0, h*sWidth*sizeof(short));
         cudaMemset(d_spaceForOther, 0, h*soWidth*sizeof(short));
@@ -337,3 +337,4 @@ void cuda_msa(int workCount, string centerSeq, vector<string> seqs, int maxLengt
     else
         cudaFree(matrix3DPtr.ptr);
 }
+

@@ -24,7 +24,7 @@ extern int BLOCKS;
 extern int THREADS;
 
 // 任务分配的比例, GPU/CPU
-extern int WORKLOAD_RATIO;
+extern double WORKLOAD_RATIO;
 
 // 运行方式
 #define GPU_ONLY 1      // 只使用GPU

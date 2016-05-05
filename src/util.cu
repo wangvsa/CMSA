@@ -84,7 +84,7 @@ int parseOptions(int argc, char* argv[]) {
                 USE_HEAP = true;
                 break;
             case 'w':                       // 设置任务比例
-                WORKLOAD_RATIO = atoi(optarg);
+                WORKLOAD_RATIO = atof(optarg);
                 break;
             case 'b':                       // 设置Blocks数量
                 BLOCKS = atoi(optarg);

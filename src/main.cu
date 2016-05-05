@@ -120,7 +120,7 @@ void output(short *space, short *spaceForOther, const char* path) {
     allAlignedStrs.insert(allAlignedStrs.begin()+centerSeqIdx, alignedCenter);
 
     // 将结果写入文件
-    printf("write to the output file.\n");
+    printf("write to the output file: %s\n", path);
     writeFastaFile(path, titles, allAlignedStrs);
 }
 
