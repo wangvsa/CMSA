@@ -32,6 +32,11 @@ FastaSeqs readFastaFile(const char *path) {
         }
     }
 
+    if(!line.empty() && !title.empty()) {
+        seqs.push_back(line);
+        titles.push_back(title);
+    }
+
     file.close();
     FastaSeqs fastaSeqs = {titles, seqs};
     return fastaSeqs;

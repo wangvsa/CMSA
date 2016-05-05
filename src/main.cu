@@ -60,7 +60,7 @@ void init(const char *path) {
 
     // 输出相关信息
     printf("\n\n=========================================\n");
-    printf("Sequences Size: %lu\n", seqs.size());
+    printf("Sequences Size: %lu\n", seqs.size()+1);
     printf("Max: %d, Min: %d, Avg: %d\n", maxLength, minLength, avgLength);
     printf("Center Sequence Index: %d\n", centerSeqIdx);
     printf("Workload Ratio of GPU/CPU: %d:%d\n", (MODE==GPU_ONLY)?WORKLOAD_RATIO:0, (MODE==GPU_ONLY)?0:1);
@@ -120,7 +120,7 @@ void output(short *space, short *spaceForOther, const char* path) {
     allAlignedStrs.insert(allAlignedStrs.begin()+centerSeqIdx, alignedCenter);
 
     // 将结果写入文件
-    printf("write to the output file: %s\n", path);
+    printf("write %lu sequences to the output file: %s\n", allAlignedStrs.size(), path);
     writeFastaFile(path, titles, allAlignedStrs);
 }
 
