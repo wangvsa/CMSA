@@ -49,7 +49,7 @@ int main(int argc, char* argv[]) {
         int n = atoi(argv[3]);
 
         printf("Write %d Sequences to %s ...\n", n, outputPath);
-        seqs.erase(seqs.begin()+n+1, seqs.end());
+        seqs.erase(seqs.begin()+n, seqs.end());
         writeFastaFile(outputPath, fs.titles, seqs);
         printf("Done.\n");
     }
