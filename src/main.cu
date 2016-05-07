@@ -80,6 +80,7 @@ void init(const char *path) {
   * 构造带空格的其他条串复杂度为:O(nm)
   */
 void output(short *space, short *spaceForOther, const char* path) {
+    double start = omp_get_wtime();
     vector<string> allAlignedStrs;
 
     int sWidth = centerSeq.size() + 1;      // space[] 的每条串宽度
@@ -124,8 +125,10 @@ void output(short *space, short *spaceForOther, const char* path) {
     allAlignedStrs.insert(allAlignedStrs.begin()+centerSeqIdx, alignedCenter);
 
     // 将结果写入文件
-    printf("write %lu sequences to the output file: %s\n", allAlignedStrs.size(), path);
     writeFastaFile(path, titles, allAlignedStrs);
+    double end = omp_get_wtime();
+    printf("write %lu sequences to the output file: %s, use time: %f\n", allAlignedStrs.size(), path, end-start);
+
 }
 
 /**
@@ -178,7 +181,6 @@ void pre_compute() {
     if(WORKLOAD_RATIO != 1)     // 用户手动设置WORKLOAD_RATIO
         return;
 
-    printf("pre compute...\n");
     vector<string> tmpSeqs;
     for(int i = 0; i < 20480; i++)
         tmpSeqs.push_back(seqs[i]);
@@ -194,6 +196,8 @@ void pre_compute() {
 
 
 int main(int argc, char *argv[]) {
+
+    double start = omp_get_wtime();
 
     // 解析用户参数
     int argvIdx = parseOptions(argc, argv);
@@ -218,15 +222,17 @@ int main(int argc, char *argv[]) {
     if( MODE == CPU_ONLY )
         workCount = 0;
 
-    double start = omp_get_wtime();
+    // MSA计算
     msa(space, spaceForOther, centerSeq, seqs, workCount);
-    double end = omp_get_wtime();
-    printf("total time: %f\n", end-start);
 
+    // 输出结果
     output(space, spaceForOther, outputPath);
 
     delete[] space;
     delete[] spaceForOther;
+
+    double end = omp_get_wtime();
+    printf("total time: %f\n", end-start);
 }
 
 
