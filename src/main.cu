@@ -21,6 +21,8 @@ int maxLength;          // 最长的串的长度
 int centerSeqIdx;
 
 
+void pre_compute();
+
 /**
  * 从path读如fasta格式文件，
  * 完成初始化工作并输出相关信息
@@ -57,13 +59,15 @@ void init(const char *path) {
     bool canUseGPU = configureKernel(centerSeq.size(), maxLength, sumLength);
     if(!canUseGPU) MODE = CPU_ONLY;
 
+    // 预计算，得到WORKLOAD_RATIO
+    pre_compute();
 
     // 输出相关信息
     printf("\n\n=========================================\n");
     printf("Sequences Size: %lu\n", seqs.size()+1);
     printf("Max: %d, Min: %d, Avg: %d\n", maxLength, minLength, avgLength);
     printf("Center Sequence Index: %d\n", centerSeqIdx);
-    printf("Workload Ratio of GPU/CPU: %d:%d\n", (MODE==GPU_ONLY)?WORKLOAD_RATIO:0, (MODE==GPU_ONLY)?0:1);
+    printf("Workload Ratio of GPU/CPU: %.2f:%d\n", (MODE==GPU_ONLY)?1:WORKLOAD_RATIO, (MODE==GPU_ONLY)?0:1);
     printf("Block Size: %d, Thread Size: %d\n", BLOCKS, THREADS);
     printf("=========================================\n\n");
     printf("Find the Center Sequence, use time: %f\n", end-start);
@@ -124,6 +128,70 @@ void output(short *space, short *spaceForOther, const char* path) {
     writeFastaFile(path, titles, allAlignedStrs);
 }
 
+/**
+  * 使用GPU和CPU计算MSA
+  * 返回CPU/GPU的运行时间比，用于pre_compute计算WORKLOAD_RATIO
+  * space: out
+  * spaceForOther: out
+  */
+double msa(short *space, short *spaceForOther, string centerSeq2, vector<string> seqs2, int gpuWorkCount) {
+    omp_set_nested(1);      // 设置允许嵌套并行，在cpu_msa中使用了parallel for
+    double gpu_time, cpu_time;
+#pragma omp parallel sections num_threads(2)
+{
+    #pragma omp section             // GPU
+    {
+        if( MODE != CPU_ONLY ) {
+            double start = omp_get_wtime();
+            cuda_msa(gpuWorkCount, centerSeq2, seqs2, maxLength, space, spaceForOther);
+            double end = omp_get_wtime();
+            gpu_time = end - start;
+            printf("GPU DP calulation, use time: %f\n", gpu_time);
+        }
+    }
+
+    #pragma omp section             // CPU, 做剩下的部分(seqs.size() - gpuWorkCount)
+    {
+        if( MODE != GPU_ONLY ) {
+            double start = omp_get_wtime();
+            cpu_msa(centerSeq2, seqs2, gpuWorkCount, space, spaceForOther, maxLength);
+            double end = omp_get_wtime();
+            cpu_time = end - start;
+            printf("CPU DP calulation, use time: %f\n", cpu_time);
+        }
+    }
+}
+    return (cpu_time / gpu_time);
+}
+
+
+/**
+  * 预先使用GPU和CPU进行计算，
+  * 给CPU 和 GPU 分配相同多的工作量(1024*10条串)进行计算
+  * 通过计算时间比例，得出GPU和CPU的任务分配WORKLOAD_RATIO
+  */
+void pre_compute() {
+    if(MODE == CPU_ONLY || MODE == GPU_ONLY)
+        return;
+    if(seqs.size() < 20480) // 需要计算的串过少不值得预计算
+        return;
+    if(WORKLOAD_RATIO != 1)     // 用户手动设置WORKLOAD_RATIO
+        return;
+
+    printf("pre compute...\n");
+    vector<string> tmpSeqs;
+    for(int i = 0; i < 20480; i++)
+        tmpSeqs.push_back(seqs[i]);
+
+    short *space = new short[seqs.size() * (centerSeq.size() + 1)];
+    short *spaceForOther = new short[seqs.size() * (maxLength + 1)];
+    WORKLOAD_RATIO = msa(space, spaceForOther, centerSeq, tmpSeqs, 10240);
+    printf("pre compute finished, ratio: %f\n", WORKLOAD_RATIO);
+
+    delete[] space;
+    delete[] spaceForOther;
+}
+
 
 int main(int argc, char *argv[]) {
 
@@ -150,31 +218,8 @@ int main(int argc, char *argv[]) {
     if( MODE == CPU_ONLY )
         workCount = 0;
 
-    omp_set_nested(1);      // 设置允许嵌套并行，在cpu_msa中使用了parallel for
     double start = omp_get_wtime();
-
-#pragma omp parallel sections num_threads(2)
-{
-    #pragma omp section             // GPU
-    {
-        if( MODE != CPU_ONLY ) {
-            double start = omp_get_wtime();
-            cuda_msa(workCount, centerSeq, seqs, maxLength, space, spaceForOther);
-            double end = omp_get_wtime();
-            printf("GPU DP calulation, use time: %f\n", end-start);
-        }
-    }
-
-    #pragma omp section             // CPU
-    {
-        if( MODE != GPU_ONLY ) {
-            double start = omp_get_wtime();
-            cpu_msa(centerSeq, seqs, workCount, space, spaceForOther, maxLength);
-            double end = omp_get_wtime();
-            printf("CPU DP calulation, use time: %f\n", end-start);
-        }
-    }
-}
+    msa(space, spaceForOther, centerSeq, seqs, workCount);
     double end = omp_get_wtime();
     printf("total time: %f\n", end-start);
 
