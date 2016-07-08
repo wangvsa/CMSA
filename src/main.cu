@@ -137,7 +137,7 @@ void output(short *space, short *spaceForOther, const char* path) {
   * space: out
   * spaceForOther: out
   */
-double msa(short *space, short *spaceForOther, string centerSeq2, vector<string> seqs2, int gpuWorkCount) {
+double msa(short *space, short *spaceForOther, vector<string> seqs, int gpuWorkCount) {
     omp_set_nested(1);      // 设置允许嵌套并行，在cpu_msa中使用了parallel for
     double gpu_time, cpu_time;
 #pragma omp parallel sections num_threads(2)
@@ -146,7 +146,7 @@ double msa(short *space, short *spaceForOther, string centerSeq2, vector<string>
     {
         if( MODE != CPU_ONLY ) {
             double start = omp_get_wtime();
-            cuda_msa(gpuWorkCount, centerSeq2, seqs2, maxLength, space, spaceForOther);
+            cuda_msa(gpuWorkCount, centerSeq, seqs, maxLength, space, spaceForOther);
             double end = omp_get_wtime();
             gpu_time = end - start;
             printf("GPU DP calulation, use time: %f\n", gpu_time);
@@ -157,7 +157,7 @@ double msa(short *space, short *spaceForOther, string centerSeq2, vector<string>
     {
         if( MODE != GPU_ONLY ) {
             double start = omp_get_wtime();
-            cpu_msa(centerSeq2, seqs2, gpuWorkCount, space, spaceForOther, maxLength);
+            cpu_msa(centerSeq, seqs, gpuWorkCount, space, spaceForOther, maxLength);
             double end = omp_get_wtime();
             cpu_time = end - start;
             printf("CPU DP calulation, use time: %f\n", cpu_time);
@@ -187,7 +187,7 @@ void pre_compute() {
 
     short *space = new short[seqs.size() * (centerSeq.size() + 1)];
     short *spaceForOther = new short[seqs.size() * (maxLength + 1)];
-    WORKLOAD_RATIO = msa(space, spaceForOther, centerSeq, tmpSeqs, 10240);
+    WORKLOAD_RATIO = msa(space, spaceForOther, tmpSeqs, 10240);
     printf("pre compute finished, ratio: %f\n", WORKLOAD_RATIO);
 
     delete[] space;
@@ -223,7 +223,7 @@ int main(int argc, char *argv[]) {
         workCount = 0;
 
     // MSA计算
-    msa(space, spaceForOther, centerSeq, seqs, workCount);
+    msa(space, spaceForOther, seqs, workCount);
 
     // 输出结果
     output(space, spaceForOther, outputPath);

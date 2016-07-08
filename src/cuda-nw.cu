@@ -67,6 +67,7 @@ void freeDeviceMatrix() {
   * seqs            in, 其他n-1条串
   * seqIdx          in, 要被计算的串的编号
   * matrix          out, 需要计算的DP矩阵
+  * 此函数没有被使用
   */
 __device__
 void cuda_nw(int m, int n, char *centerSeq, char *seq, short*matrix, int width) {
@@ -84,8 +85,6 @@ void cuda_nw(int m, int n, char *centerSeq, char *seq, short*matrix, int width) 
             matrix[i*width+j] = max(up, left, diag);
         }
     }
-
-    //printMatrix(matrix, m, n);
 }
 __device__
 void cuda_nw_3d(int m, int n, char *centerSeq, char *seq, cudaPitchedPtr matrix3DPtr) {
@@ -131,6 +130,7 @@ void cuda_nw_3d(int m, int n, char *centerSeq, char *seq, cudaPitchedPtr matrix3
   * matrix          in, 本次匹配得到的DP矩阵
   * space           out, 需要计算的本次匹配给中心串引入的空格
   * spaceForOther   out, 需要计算的本次匹配给当前串引入的空格
+  * 此函数没有被使用
   */
 __device__
 void cuda_backtrack(int m, int n, short* matrix, short *spaceRow, short *spaceForOtherRow, int width) {
@@ -156,28 +156,6 @@ __device__
 void cuda_backtrack_3d(int m, int n, char *centerSeq, char *seq, cudaPitchedPtr matrix3DPtr, short *spaceRow, short *spaceForOtherRow) {
     size_t slicePitch = matrix3DPtr.pitch * (m+1);
     char *slice = (char *)matrix3DPtr.ptr + get_tid * slicePitch;
-
-    // 从(m, n) 遍历到 (0, 0)
-    // DP矩阵的纬度是m+1, n+1
-    /*
-    int i = m, j = n;
-    while(i!=0 || j!=0) {
-        short *matrixLastRow = (short *)(slice + (i-1) * matrix3DPtr.pitch);
-        short *matrixRow = (short *)(slice + i * matrix3DPtr.pitch);
-        int score = matrixRow[j];                                   // matrix[i][j]
-        //printf("%d,%d:  %d\n", i, j, score);
-        if(i > 0 && matrixLastRow[j] + GAP == score) {              // matrix[i-1][j]
-            spaceForOtherRow[j]++;                                  // spaceForOther[seqIdx][j]
-            i--;
-        } else if(j > 0 && matrixRow[j-1] + GAP == score) {         // matrix[i][j-1]
-            spaceRow[i]++;                                          // space[seqIdx][i]
-            j--;
-        } else {
-            i--;
-            j--;
-        }
-    }
-    */
 
     int i = m, j = n;
     while(i!=0 || j!=0) {
@@ -230,14 +208,8 @@ void kernel(int startIdx, char *centerSeq, char *seqs, int centerSeqLength, int 
     short *spaceForOtherRow = spaceForOther + tid * width;
 
     // 计算使用的DP矩阵
-    if(!matrix3DPtr.ptr) {
-        short* matrix = d_matrixPtr[tid];
-        cuda_nw(m, n, centerSeq, seq, matrix, width);
-        cuda_backtrack(m, n, matrix, spaceRow, spaceForOtherRow, width);
-    } else {
-        cuda_nw_3d(m, n, centerSeq, seq, matrix3DPtr);
-        cuda_backtrack_3d(m, n,centerSeq, seq, matrix3DPtr, spaceRow, spaceForOtherRow);
-    }
+    cuda_nw_3d(m, n, centerSeq, seq, matrix3DPtr);
+    cuda_backtrack_3d(m, n,centerSeq, seq, matrix3DPtr, spaceRow, spaceForOtherRow);
 
     //printMatrix(spaceForOtherRow, 1, n+1);
 }
@@ -288,24 +260,13 @@ void cuda_msa(int workCount, string centerSeq, vector<string> seqs, int maxLengt
     cudaMalloc((void**)&d_spaceForOther, h*soWidth*sizeof(short));
 
 
-    // 在堆中动态分配matrix所需要的内存（有4GB的上限）
-    // 或者直接分配一个3D的Matrix
+    // 分配一个3D的Matrix
     size_t freeMem, totalMem;
     cudaPitchedPtr matrix3DPtr;
-    if(USE_HEAP) {
-        matrix3DPtr.ptr = NULL;
-        // 设置(可用内存的80%)堆内存的上限，大于4GB会出错
-        cudaMemGetInfo(&freeMem, &totalMem);
-        size_t heapSize = freeMem/10*8 > 4UL*1024*1024*1024 ? 4UL*1024*1024*1024 : freeMem/10*8;
-        cudaDeviceSetLimit(cudaLimitMallocHeapSize, heapSize);
-        allocDeviceMatrix<<<BLOCKS, THREADS>>>(centerSeq.size(), maxLength);
-    } else {
-        cudaExtent matrixSize = make_cudaExtent(sizeof(DPCell) * soWidth, sWidth, SEQUENCES_PER_KERNEL);
-        cudaMalloc3D(&matrix3DPtr, matrixSize);
-    }
+    cudaExtent matrixSize = make_cudaExtent(sizeof(DPCell) * soWidth, sWidth, SEQUENCES_PER_KERNEL);
+    cudaMalloc3D(&matrix3DPtr, matrixSize);
     cudaMemGetInfo(&freeMem, &totalMem);
     printf("freeMem :%luMB, totalMem: %luMB\n", freeMem/1024/1024, totalMem/1024/1024);
-
 
 
     for(int i = 0; i <= workCount / SEQUENCES_PER_KERNEL; i++) {
@@ -314,7 +275,7 @@ void cuda_msa(int workCount, string centerSeq, vector<string> seqs, int maxLengt
 
         // 此次kernel计算的起始串的位置
         int startIdx = i * SEQUENCES_PER_KERNEL;
-       // printf("%d. startIdx: %d, h: %d\n", i, startIdx, h);
+        printf("%d. startIdx: %d, h: %d\n", i, startIdx, h);
 
         cudaMemset(d_space, 0, h*sWidth*sizeof(short));
         cudaMemset(d_spaceForOther, 0, h*soWidth*sizeof(short));
@@ -332,9 +293,6 @@ void cuda_msa(int workCount, string centerSeq, vector<string> seqs, int maxLengt
     cudaFree(d_spaceForOther);
     cudaFree(d_centerSeq);
     cudaFree(d_seqs);
-    if(USE_HEAP)
-        freeDeviceMatrix<<<BLOCKS, THREADS>>>();
-    else
-        cudaFree(matrix3DPtr.ptr);
+    cudaFree(matrix3DPtr.ptr);
 }
 

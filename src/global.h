@@ -32,6 +32,4 @@ extern double WORKLOAD_RATIO;
 #define CPU_GPU 3       // 同时使用GPU和CPU
 extern int MODE;        // 1, 2, 3
 
-extern bool USE_HEAP;
-
 #endif

@@ -77,16 +77,13 @@ int parseOptions(int argc, char* argv[]) {
     }
 
     int oc;
-    while((oc = getopt(argc, argv, "gcdw:b:t:")) != -1) {
+    while((oc = getopt(argc, argv, "gcw:b:t:")) != -1) {
         switch(oc) {
             case 'g':                       // 只使用GPU
                 MODE = GPU_ONLY;
                 break;
             case 'c':                       // 只使用CPU (OpenMP)
                 MODE = CPU_ONLY;
-                break;
-            case 'd':                       // 在堆内存中分配DP矩阵
-                USE_HEAP = true;
                 break;
             case 'w':                       // 设置任务比例
                 WORKLOAD_RATIO = atof(optarg);
