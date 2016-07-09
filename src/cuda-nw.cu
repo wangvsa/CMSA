@@ -121,9 +121,17 @@ void cuda_nw_3d(int m, int n, char *centerSeq, char *seq, cudaPitchedPtr matrix3
       */
     short upScore, upYGap, diagScore;
     for(int i=1;i<=m;i+=COL_STEP) {
-        short leftScore[COL_STEP] = {MIN_SCORE}, leftXGap[COL_STEP] = {MIN_SCORE};
+        // 直接这样生命没有把所有元素初始化为MIN_SCORE
+        //short leftScore[COL_STEP] = {MIN_SCORE}, leftXGap[COL_STEP] = {MIN_SCORE};
+        short leftScore[COL_STEP], leftXGap[COL_STEP];
+        for(int tmp=0;tmp<COL_STEP;tmp++) {
+            leftScore[tmp] = MIN_SCORE;
+            leftXGap[tmp] = MIN_SCORE;
+        }
+
         for(int j=1;j<=n;j++) {
             for(int k=0;k<COL_STEP;k++) {
+                if(i+k>m) break;
                 DPCell *matrixRow = (DPCell *)(slice + (i+k) * matrix3DPtr.pitch);
                 DPCell *matrixLastRow = (DPCell *)(slice + (i-1+k) * matrix3DPtr.pitch);
 
