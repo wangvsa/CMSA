@@ -86,6 +86,8 @@ void cuda_nw(int m, int n, char *centerSeq, char *seq, short*matrix, int width) 
         }
     }
 }
+
+#define COL_STEP 10
 __device__
 void cuda_nw_3d(int m, int n, char *centerSeq, char *seq, cudaPitchedPtr matrix3DPtr) {
     size_t slicePitch = matrix3DPtr.pitch * (m+1);
@@ -108,12 +110,20 @@ void cuda_nw_3d(int m, int n, char *centerSeq, char *seq, cudaPitchedPtr matrix3
     matrixRow[0].score = 0;             // matrix[0][0]
 
 
+    /**
+      * 参照这篇论文：
+      * [IPDPS-2009]An Efficient Implementation Of Smith Waterman Algorithm On Gpu Using Cuda, For Massively Parallel Scanning Of Sequence Databases
+      * 横向计算，每次计算COL_STEP列，理论上讲COL_STEP越大越好，取决与register per block的限制
+      * 这样左侧依赖数据，以及一列（COL_STEP个cell）内的上侧依赖数据就可以存储在register中
+      * 有效减少global memory访问次数。
+      * TODO: 1. 对角线的global memory访问也可以节省掉
+      *       2. 如果中心串的长度不能被COL_STEP整除怎么处理
+      */
     short upScore, upYGap, diagScore;
-
-    for(int i=1;i<=m;i+=6) {
-        short leftScore[6] = {MIN_SCORE}, leftXGap[6] = {MIN_SCORE};
+    for(int i=1;i<=m;i+=COL_STEP) {
+        short leftScore[COL_STEP] = {MIN_SCORE}, leftXGap[COL_STEP] = {MIN_SCORE};
         for(int j=1;j<=n;j++) {
-            for(int k=0;k<6;k++) {
+            for(int k=0;k<COL_STEP;k++) {
                 DPCell *matrixRow = (DPCell *)(slice + (i+k) * matrix3DPtr.pitch);
                 DPCell *matrixLastRow = (DPCell *)(slice + (i-1+k) * matrix3DPtr.pitch);
 
