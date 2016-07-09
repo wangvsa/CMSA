@@ -152,7 +152,7 @@ double msa(short *space, short *spaceForOther, vector<string> seqs, int gpuWorkC
     {
         if( MODE != CPU_ONLY ) {
             double start = omp_get_wtime();
-            cuda_msa(gpuWorkCount, centerSeq, seqs, maxLength, space, spaceForOther);
+            multi_gpu_msa(gpuWorkCount, centerSeq, seqs, maxLength, space, spaceForOther);
             double end = omp_get_wtime();
             gpu_time = end - start;
             printf("GPU DP calulation, use time: %f\n", gpu_time);
