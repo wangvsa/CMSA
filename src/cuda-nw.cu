@@ -107,18 +107,38 @@ void cuda_nw_3d(int m, int n, char *centerSeq, char *seq, cudaPitchedPtr matrix3
     }
     matrixRow[0].score = 0;             // matrix[0][0]
 
-    for(int i=1;i<=m;i++) {
-        DPCell *matrixLastRow = (DPCell *)(slice + (i-1) * matrix3DPtr.pitch);
-        DPCell *matrixRow = (DPCell *)(slice + i * matrix3DPtr.pitch);
+
+    short upScore, upYGap, diagScore;
+
+    for(int i=1;i<=m;i+=6) {
+        short leftScore[6] = {MIN_SCORE}, leftXGap[6] = {MIN_SCORE};
         for(int j=1;j<=n;j++) {
-            //int up = matrixLastRow[j] + GAP;                                                // matrix[i-1][j]
-            //int left = matrixRow[j-1] + GAP;                                                // matrix[i][j-1]
-            short x_gap = max(GAP_START+GAP_EXTEND+matrixRow[j-1].score, GAP_EXTEND+matrixRow[j-1].x_gap);
-            short y_gap = max(GAP_START+GAP_EXTEND+matrixLastRow[j].score, GAP_EXTEND+matrixLastRow[j].y_gap);
-            short score = matrixLastRow[j-1].score + ((centerSeq[i-1]==seq[j-1])?MATCH:MISMATCH);    // matrix[i-1][j-1]
-            matrixRow[j].x_gap = x_gap;
-            matrixRow[j].y_gap = y_gap;
-            matrixRow[j].score = max(x_gap, y_gap, score);
+            for(int k=0;k<6;k++) {
+                DPCell *matrixRow = (DPCell *)(slice + (i+k) * matrix3DPtr.pitch);
+                DPCell *matrixLastRow = (DPCell *)(slice + (i-1+k) * matrix3DPtr.pitch);
+
+                DPCell cell;            // 当前计算的cell
+                if(k==0) {
+                    upScore = matrixLastRow[j].score;
+                    upYGap = matrixLastRow[j].y_gap;
+                    diagScore = matrixLastRow[j-1].score;
+                }
+
+                cell.x_gap = max(GAP_START+GAP_EXTEND+leftScore[k], GAP_EXTEND+leftXGap[k]);
+                cell.y_gap = max(GAP_START+GAP_EXTEND+upScore, GAP_EXTEND+upYGap);
+                cell.score = diagScore + ((centerSeq[i+k-1]==seq[j-1])?MATCH:MISMATCH);               // matrix[i-1][j-1]
+                cell.score = max(cell.x_gap, cell.y_gap, cell.score);
+
+                // 更新当前列下一行cell计算所需要的数据
+                upScore = cell.score;
+                upYGap = cell.y_gap;
+                diagScore = leftScore[k];
+                // 更新当前行下一列cell计算所需要的数据
+                leftScore[k] = cell.score;
+                leftXGap[k] = cell.x_gap;
+
+                matrixRow[j] = cell;    // 写入当前cell到Global Memory
+            }
         }
     }
 }
@@ -183,7 +203,6 @@ void cuda_backtrack_3d(int m, int n, char *centerSeq, char *seq, cudaPitchedPtr 
             }
         }
     }
-
 }
 
 

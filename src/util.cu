@@ -107,6 +107,7 @@ int parseOptions(int argc, char* argv[]) {
 bool configureKernel(int centerSeqLength, int maxLength, unsigned long sumLength) {
 
     size_t freeMem, totalMem;
+    cudaSetDevice(0);
     cudaMemGetInfo(&freeMem, &totalMem);
 
     // 每次两两匹配的DP矩阵所需要的空间

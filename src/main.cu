@@ -31,14 +31,18 @@ void init(const char *path) {
     // 读入所有字符串
     // centerSeq, 图中的纵向，决定了行数m
     // seqs[idx], 图中的横向，决定了列数n
+    double start = omp_get_wtime();
     FastaSeqs fastaSeqs = readFastaFile(path);
     titles = fastaSeqs.titles;
     seqs = fastaSeqs.seqs;
+    double end = omp_get_wtime();
+    printf("Read Sequences, use time: %f\n", end-start);
 
     // 找出中心串
-    double start = omp_get_wtime();
+    start = omp_get_wtime();
     centerSeqIdx = findCenterSequence(seqs);
-    double end = omp_get_wtime();
+    end = omp_get_wtime();
+    printf("Find the Center Sequence, use time: %f\n", end-start);
 
     centerSeq = seqs[centerSeqIdx];
     seqs.erase(seqs.begin() + centerSeqIdx);
@@ -56,8 +60,11 @@ void init(const char *path) {
     int avgLength = sumLength / seqs.size();
 
     // 检查Kernel的配置, 返回值是是否可以在GPU执行
+    start = omp_get_wtime();
     bool canUseGPU = configureKernel(centerSeq.size(), maxLength, sumLength);
     if(!canUseGPU) MODE = CPU_ONLY;
+    end = omp_get_wtime();
+    printf("Configure Kernel, use time: %f\n", end-start);
 
     // 预计算，得到WORKLOAD_RATIO
     pre_compute();
@@ -70,7 +77,6 @@ void init(const char *path) {
     printf("Workload Ratio of GPU/CPU: %.2f:%d\n", (MODE==GPU_ONLY)?1:WORKLOAD_RATIO, (MODE==GPU_ONLY)?0:1);
     printf("Block Size: %d, Thread Size: %d\n", BLOCKS, THREADS);
     printf("=========================================\n\n");
-    printf("Find the Center Sequence, use time: %f\n", end-start);
 }
 
 /**
