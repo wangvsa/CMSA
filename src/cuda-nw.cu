@@ -40,24 +40,6 @@ int cuda_strlen(char *str) {
 }
 
 
-/**
-  * 每个线程有一个指向matrix的指针
-  * matrix是一维的，大小是sizeof(short) * (m+1) * (maxLength+1)
-  * 在堆中动态分配，每个kernel重复使用即可
-  */
-__device__ short* d_matrixPtr[MAX_THREADS * MAX_BLOCKS];
-
-__global__
-void allocDeviceMatrix(int centerSeqLength, int maxLength) {
-    d_matrixPtr[get_tid] = new short[(centerSeqLength+1) * (maxLength+1)];
-}
-
-__global__
-void freeDeviceMatrix() {
-    if(d_matrixPtr[get_tid])
-        delete[] d_matrixPtr[get_tid];
-}
-
 
 
 /**
@@ -225,20 +207,17 @@ void cuda_backtrack_3d(int m, int n, char *centerSeq, char *seq, cudaPitchedPtr 
 
 
 __global__
-void kernel(int startSeqIdx, char *centerSeq, char *seqs, int centerSeqLength, int *seqsSize, cudaPitchedPtr matrix3DPtr, short *space, short *spaceForOther, int maxLength, int workCount) {
+void kernel(char *centerSeq, char *seqs, int centerSeqLength, int *seqsSize, cudaPitchedPtr matrix3DPtr, short *space, short *spaceForOther, int maxLength, int workload) {
 
     int tid = get_tid;
-    int seqIdx = tid + startSeqIdx;
-    if(seqIdx >= workCount) return;
+    if(tid >= workload) return;
 
     // 得到当前线程要计算的串
     int width = maxLength + 1;
-    char *seq = seqs + width * seqIdx;
+    char *seq = seqs + width * tid;
 
-    //int m = cuda_strlen(centerSeq);
-    //int n = cuda_strlen(seq);
     int m = centerSeqLength;
-    int n = seqsSize[seqIdx];
+    int n = seqsSize[tid];
 
     // 当前匹配的字符串所需要填的空格数组的位置
     short *spaceRow = space + tid * (m+1);
@@ -252,77 +231,25 @@ void kernel(int startSeqIdx, char *centerSeq, char *seqs, int centerSeqLength, i
 }
 
 
-/**
-  * 支持多个GPU
-  * workCount:int       需要由GPU执行的工作量，平均分给各个GPU
-  * centerSeq:string    中心串
-  * seqs:vector<string> 除中心串外的所有串
-  * maxLength:int       所有串的最长长度
-  */
-void cuda_msa(int offset, int workCount, string centerSeq, vector<string> seqs, int maxLength, short *space, short *spaceForOther);
-void multi_gpu_msa(int workCount, string centerSeq, vector<string> seqs, int maxLength, short *space, short *spaceForOther) {
-    if(workCount<= 0) return;
-
-    int GPU_NUM;
-    cudaGetDeviceCount(&GPU_NUM);
-    //GPU_NUM = 1;
-    int workload = workCount / GPU_NUM;
-
-    for(int i = 0; i < GPU_NUM; i++) {
-        cudaSetDevice(i);
-        if(i != GPU_NUM - 1) {
-            cuda_msa(i*workload, workload, centerSeq, seqs, maxLength, space, spaceForOther);
-        } else {                // 最后一块GPU还要做多做余数
-            cuda_msa(i*workload, workload+(workCount%GPU_NUM), centerSeq, seqs, maxLength, space, spaceForOther);
-        }
-    }
-
-    cudaDeviceReset();
-}
 
 
-void cuda_msa(int offset, int workCount, string centerSeq, vector<string> seqs, int maxLength, short *space, short *spaceForOther) {
+// totalWorkload:int    当前GPU设备需要计算的所有串的个数
+void cuda_msa(int offset, GPUData data, string centerSeq, int maxLength, short *space, short *spaceForOther) {
 
     int sWidth = centerSeq.size() + 1;      // d_space的宽度
     int soWidth = maxLength + 1;            // d_spaceForOther的宽度
 
-    // 1. 将中心串传到GPU
-    char *d_centerSeq;
-    cudaMalloc((void**)&d_centerSeq, sWidth * sizeof(char));
-    cudaMemcpy(d_centerSeq, centerSeq.c_str(), sWidth *sizeof(char), cudaMemcpyHostToDevice);
 
-    // 2. 将需要匹配串拼接成一个长串传到GPU
-    char *d_seqs;
-    cudaMalloc((void**)&d_seqs, (maxLength+1)*workCount*sizeof(char));
-    char *c_seqs = new char[(maxLength+1) * workCount];
-    for(int i=0;i<workCount;i++) {
-        char *p = &(c_seqs[i * (maxLength + 1)]);
-        strcpy(p, seqs[i+offset].c_str());
-    }
-    cudaMemcpy(d_seqs, c_seqs, (maxLength+1)*workCount*sizeof(char), cudaMemcpyHostToDevice);
-    delete[] c_seqs;
-
-
-    // 3. 将要匹配的串的长度也计算好传给GPU，因为在GPU上计算长度比较慢
-    int *seqsSize = new int[workCount];
-    for(int i = 0; i < workCount; i++)
-        seqsSize[i] = seqs[i+offset].size();
-    int *d_seqsSize;
-    cudaMalloc((void**)&d_seqsSize, sizeof(int)*workCount);
-    cudaMemcpy(d_seqsSize, seqsSize, sizeof(int)*workCount, cudaMemcpyHostToDevice);
-    delete[] seqsSize;
-
-
-    // 每个kernel计算SEQUENCES_PER_KERNEL条串
+    // 根据参数，每个kernel计算SEQUENCES_PER_KERNEL条串
+    // workload 为本次kernel需要计算的量
     int SEQUENCES_PER_KERNEL = BLOCKS * THREADS;
-    int h = workCount < SEQUENCES_PER_KERNEL ? workCount : SEQUENCES_PER_KERNEL;
+    int workload = data.totalWorkload < SEQUENCES_PER_KERNEL ? data.totalWorkload : SEQUENCES_PER_KERNEL;
 
     // 给存储空格信息申请空间
     // d_space, d_spaceForOther 是循环利用的
     short *d_space, *d_spaceForOther;
-    cudaMalloc((void**)&d_space, h*sWidth*sizeof(short));
-    cudaMalloc((void**)&d_spaceForOther, h*soWidth*sizeof(short));
-
+    cudaMalloc((void**)&d_space, workload*sWidth*sizeof(short));
+    cudaMalloc((void**)&d_spaceForOther, workload*soWidth*sizeof(short));
 
     // 分配一个3D的DP Matrix
     size_t freeMem, totalMem;
@@ -332,33 +259,113 @@ void cuda_msa(int offset, int workCount, string centerSeq, vector<string> seqs, 
     cudaMemGetInfo(&freeMem, &totalMem);
     printf("freeMem :%luMB, totalMem: %luMB\n", freeMem/1024/1024, totalMem/1024/1024);
 
-    for(int i = 0; i <= workCount / SEQUENCES_PER_KERNEL; i++) {
-        if(i==workCount/SEQUENCES_PER_KERNEL)
-            h = workCount % SEQUENCES_PER_KERNEL;
+    for(int i = 0; i <= data.totalWorkload / SEQUENCES_PER_KERNEL; i++) {
+        if(i==data.totalWorkload/SEQUENCES_PER_KERNEL)           // 最后一次kernel计算量
+            workload = data.totalWorkload % SEQUENCES_PER_KERNEL;
 
-        // 此次kernel计算的起始串的位置（是相对位置，相对自己计算的起始串的）
-        int startIdx = i * SEQUENCES_PER_KERNEL;
-        printf("%d. idx: %d, h: %d\n", i, startIdx+offset, h);
+        // 此次kernel计算的起始串的位置
+        int startIdx = i * SEQUENCES_PER_KERNEL + offset;
+        printf("%d. startIdx: %d, workload: %d\n", i, startIdx, workload);
 
-        cudaMemset(d_space, 0, h*sWidth*sizeof(short));
-        cudaMemset(d_spaceForOther, 0, h*soWidth*sizeof(short));
+        cudaMemsetAsync(d_space, 0, workload*sWidth*sizeof(short), data.stream);
+        cudaMemsetAsync(d_spaceForOther, 0, workload*soWidth*sizeof(short), data.stream);
 
-        kernel<<<BLOCKS, THREADS>>>(startIdx, d_centerSeq, d_seqs, centerSeq.size(), d_seqsSize, matrix3DPtr, d_space, d_spaceForOther, maxLength, workCount);
+        // 1. 把这次kernel要计算的串和串的长度信息传送给GPU
+        cudaMemcpyAsync(data.d_seqs, data.h_seqs+(maxLength+1)*(i*SEQUENCES_PER_KERNEL), (maxLength+1)*workload*sizeof(char), cudaMemcpyHostToDevice, data.stream);
+        cudaMemcpyAsync(data.d_seqsSize, data.h_seqsSize+(i*SEQUENCES_PER_KERNEL), sizeof(int)*workload, cudaMemcpyHostToDevice, data.stream);
+
+        // 2. Kernel计算
+        kernel<<<BLOCKS, THREADS, 0, data.stream>>>(data.d_centerSeq, data.d_seqs, centerSeq.size(), data.d_seqsSize, matrix3DPtr, d_space, d_spaceForOther, maxLength, workload);
         cudaError_t err  = cudaGetLastError();
         if ( cudaSuccess != err )
             printf("Error: %d, %s\n", err, cudaGetErrorString(err));
 
-        // 将空格信息传回给CPU
+        // 3. 将计算得到的将空格信息传回给CPU
         // TODO：使用Pipeline可以重叠数据传输和kernel计算
-        int spaceIdx = startIdx + offset;
-        cudaMemcpy(space+spaceIdx*sWidth, d_space, h*sWidth*sizeof(short), cudaMemcpyDeviceToHost);
-        cudaMemcpy(spaceForOther+spaceIdx*soWidth, d_spaceForOther, h*soWidth*sizeof(short), cudaMemcpyDeviceToHost);
+        cudaMemcpyAsync(space+startIdx*sWidth, d_space, workload*sWidth*sizeof(short), cudaMemcpyDeviceToHost, data.stream);
+        cudaMemcpyAsync(spaceForOther+startIdx*soWidth, d_spaceForOther, workload*soWidth*sizeof(short), cudaMemcpyDeviceToHost, data.stream);
     }
 
     cudaFree(d_space);
     cudaFree(d_spaceForOther);
-    cudaFree(d_centerSeq);
-    cudaFree(d_seqs);
     cudaFree(matrix3DPtr.ptr);
 }
 
+
+/**
+  * 支持多个GPU
+  * gpuWorkload:int     需要由GPU执行的工作量，平均分给各个GPU
+  * centerSeq:string    中心串
+  * seqs:vector<string> 除中心串外的所有串
+  * maxLength:int       所有串的最长长度
+  */
+void multi_gpu_msa(int gpuWorkload, string centerSeq, vector<string> seqs, int maxLength, short *space, short *spaceForOther) {
+    if(gpuWorkload <= 0) return;
+
+    int GPU_NUM;
+    cudaGetDeviceCount(&GPU_NUM);
+    GPU_NUM = 1;
+
+    int workload = gpuWorkload / GPU_NUM;
+
+    // 为每个GPU设置数据，分配空间
+    GPUData gpuData[GPU_NUM];
+    int sWidth = centerSeq.size() + 1;      // d_space的宽度
+    //int soWidth = maxLength + 1;            // d_spaceForOther的宽度
+    for(int i = 0; i < GPU_NUM; i++) {
+        cudaSetDevice(i);
+
+        int offset = i * workload;
+
+        // 计算任务量，最后一块GPU还要计算多余的余数
+        gpuData[i].totalWorkload =  workload + ((i==GPU_NUM-1) ? (gpuWorkload%GPU_NUM) : 0);
+
+        // 创建stream
+        cudaStreamCreate(&(gpuData[i].stream));
+
+        // 1. 中心串
+        cudaMalloc((void**)(&(gpuData[i].d_centerSeq)), sWidth * sizeof(char));
+        cudaMemcpy(gpuData[i].d_centerSeq, centerSeq.c_str(), sWidth *sizeof(char), cudaMemcpyHostToDevice);
+
+        // 2. 将需要匹配串拼接成一个长串传到GPU
+        int w = maxLength + 1;
+        gpuData[i].h_seqs = new char[w*gpuData[i].totalWorkload];
+        for(int k = 0; k < gpuData[i].totalWorkload; k++) {
+            char *p = &(gpuData[i].h_seqs[k * w]);
+            strcpy(p, seqs[k+offset].c_str());
+        }
+        cudaMalloc((void**)(&(gpuData[i].d_seqs)), w*gpuData[i].totalWorkload*sizeof(char));
+
+        // 3. 将要匹配的串的长度也计算好传给GPU，因为在GPU上计算长度比较慢
+        gpuData[i].h_seqsSize = new int[gpuData[i].totalWorkload];
+        for(int k = 0; k < gpuData[i].totalWorkload; k++)
+            gpuData[i].h_seqsSize[k] = seqs[k+offset].size();
+        cudaMalloc((void**)(&(gpuData[i].d_seqsSize)), sizeof(int)*gpuData[i].totalWorkload);
+    }
+
+
+    // 每个GPU并行计算任务
+    for(int i = 0; i < GPU_NUM; i++) {
+        cudaSetDevice(i);
+        int offset = i * workload;
+        if(i != GPU_NUM - 1)
+            cuda_msa(offset, gpuData[i], centerSeq, maxLength, space, spaceForOther);
+        else                                // 最后一块GPU还要做多做余数
+            cuda_msa(offset, gpuData[i], centerSeq, maxLength, space, spaceForOther);
+    }
+
+
+    // 等待所有GPU设备完成后释放资源
+    for(int i = 0; i < GPU_NUM; i++) {
+        cudaSetDevice(i);
+        cudaStreamSynchronize(gpuData[i].stream);
+        delete[] gpuData[i].h_seqs;
+        delete[] gpuData[i].h_seqsSize;
+        cudaFree(gpuData[i].d_centerSeq);
+        cudaFree(gpuData[i].d_seqs);
+        cudaFree(gpuData[i].d_seqsSize);
+        cudaStreamDestroy(gpuData[i].stream);
+    }
+
+    cudaDeviceReset();
+}
