@@ -239,7 +239,6 @@ void cuda_msa(int offset, GPUData data, string centerSeq, int maxLength, short *
     int sWidth = centerSeq.size() + 1;      // d_space的宽度
     int soWidth = maxLength + 1;            // d_spaceForOther的宽度
 
-
     // 根据参数，每个kernel计算SEQUENCES_PER_KERNEL条串
     // workload 为本次kernel需要计算的量
     int SEQUENCES_PER_KERNEL = BLOCKS * THREADS;
@@ -247,15 +246,13 @@ void cuda_msa(int offset, GPUData data, string centerSeq, int maxLength, short *
 
     // 给存储空格信息申请空间
     // d_space, d_spaceForOther 是循环利用的
-    short *d_space, *d_spaceForOther;
-    cudaMalloc((void**)&d_space, workload*sWidth*sizeof(short));
-    cudaMalloc((void**)&d_spaceForOther, workload*soWidth*sizeof(short));
+    cudaMalloc((void**)&data.d_space, workload*sWidth*sizeof(short));
+    cudaMalloc((void**)&data.d_spaceForOther, workload*soWidth*sizeof(short));
 
     // 分配一个3D的DP Matrix
     size_t freeMem, totalMem;
-    cudaPitchedPtr matrix3DPtr;
     cudaExtent matrixSize = make_cudaExtent(sizeof(DPCell) * soWidth, sWidth, SEQUENCES_PER_KERNEL);
-    cudaMalloc3D(&matrix3DPtr, matrixSize);
+    cudaMalloc3D(&data.matrix3DPtr, matrixSize);
     cudaMemGetInfo(&freeMem, &totalMem);
     printf("freeMem :%luMB, totalMem: %luMB\n", freeMem/1024/1024, totalMem/1024/1024);
 
@@ -267,28 +264,25 @@ void cuda_msa(int offset, GPUData data, string centerSeq, int maxLength, short *
         int startIdx = i * SEQUENCES_PER_KERNEL + offset;
         printf("%d. startIdx: %d, workload: %d\n", i, startIdx, workload);
 
-        cudaMemsetAsync(d_space, 0, workload*sWidth*sizeof(short), data.stream);
-        cudaMemsetAsync(d_spaceForOther, 0, workload*soWidth*sizeof(short), data.stream);
+        cudaMemsetAsync(data.d_space, 0, workload*sWidth*sizeof(short), data.stream);
+        cudaMemsetAsync(data.d_spaceForOther, 0, workload*soWidth*sizeof(short), data.stream);
 
         // 1. 把这次kernel要计算的串和串的长度信息传送给GPU
         cudaMemcpyAsync(data.d_seqs, data.h_seqs+(maxLength+1)*(i*SEQUENCES_PER_KERNEL), (maxLength+1)*workload*sizeof(char), cudaMemcpyHostToDevice, data.stream);
         cudaMemcpyAsync(data.d_seqsSize, data.h_seqsSize+(i*SEQUENCES_PER_KERNEL), sizeof(int)*workload, cudaMemcpyHostToDevice, data.stream);
 
         // 2. Kernel计算
-        kernel<<<BLOCKS, THREADS, 0, data.stream>>>(data.d_centerSeq, data.d_seqs, centerSeq.size(), data.d_seqsSize, matrix3DPtr, d_space, d_spaceForOther, maxLength, workload);
+        kernel<<<BLOCKS, THREADS, 0, data.stream>>>(data.d_centerSeq, data.d_seqs, centerSeq.size(), data.d_seqsSize, data.matrix3DPtr, data.d_space, data.d_spaceForOther, maxLength, workload);
         cudaError_t err  = cudaGetLastError();
         if ( cudaSuccess != err )
             printf("Error: %d, %s\n", err, cudaGetErrorString(err));
 
         // 3. 将计算得到的将空格信息传回给CPU
         // TODO：使用Pipeline可以重叠数据传输和kernel计算
-        cudaMemcpyAsync(space+startIdx*sWidth, d_space, workload*sWidth*sizeof(short), cudaMemcpyDeviceToHost, data.stream);
-        cudaMemcpyAsync(spaceForOther+startIdx*soWidth, d_spaceForOther, workload*soWidth*sizeof(short), cudaMemcpyDeviceToHost, data.stream);
+        cudaMemcpyAsync(space+startIdx*sWidth, data.d_space, workload*sWidth*sizeof(short), cudaMemcpyDeviceToHost, data.stream);
+        cudaMemcpyAsync(spaceForOther+startIdx*soWidth, data.d_spaceForOther, workload*soWidth*sizeof(short), cudaMemcpyDeviceToHost, data.stream);
     }
 
-    cudaFree(d_space);
-    cudaFree(d_spaceForOther);
-    cudaFree(matrix3DPtr.ptr);
 }
 
 
@@ -304,14 +298,14 @@ void multi_gpu_msa(int gpuWorkload, string centerSeq, vector<string> seqs, int m
 
     int GPU_NUM;
     cudaGetDeviceCount(&GPU_NUM);
-    GPU_NUM = 1;
+    //GPU_NUM = 1;
 
     int workload = gpuWorkload / GPU_NUM;
 
     // 为每个GPU设置数据，分配空间
     GPUData gpuData[GPU_NUM];
     int sWidth = centerSeq.size() + 1;      // d_space的宽度
-    //int soWidth = maxLength + 1;            // d_spaceForOther的宽度
+    //int soWidth = maxLength + 1;          // d_spaceForOther的宽度
     for(int i = 0; i < GPU_NUM; i++) {
         cudaSetDevice(i);
 
@@ -328,8 +322,9 @@ void multi_gpu_msa(int gpuWorkload, string centerSeq, vector<string> seqs, int m
         cudaMemcpy(gpuData[i].d_centerSeq, centerSeq.c_str(), sWidth *sizeof(char), cudaMemcpyHostToDevice);
 
         // 2. 将需要匹配串拼接成一个长串传到GPU
+        //    为实现数据传输和计算重叠，需要Pinned Memory
         int w = maxLength + 1;
-        gpuData[i].h_seqs = new char[w*gpuData[i].totalWorkload];
+        cudaMallocHost((void**)(&(gpuData[i].h_seqs)), w*gpuData[i].totalWorkload*sizeof(char));
         for(int k = 0; k < gpuData[i].totalWorkload; k++) {
             char *p = &(gpuData[i].h_seqs[k * w]);
             strcpy(p, seqs[k+offset].c_str());
@@ -337,7 +332,8 @@ void multi_gpu_msa(int gpuWorkload, string centerSeq, vector<string> seqs, int m
         cudaMalloc((void**)(&(gpuData[i].d_seqs)), w*gpuData[i].totalWorkload*sizeof(char));
 
         // 3. 将要匹配的串的长度也计算好传给GPU，因为在GPU上计算长度比较慢
-        gpuData[i].h_seqsSize = new int[gpuData[i].totalWorkload];
+        //    为实现数据传输和计算重叠，需要Pinned Memory
+        cudaMallocHost((void**)(&(gpuData[i].h_seqsSize)), sizeof(int)*gpuData[i].totalWorkload);
         for(int k = 0; k < gpuData[i].totalWorkload; k++)
             gpuData[i].h_seqsSize[k] = seqs[k+offset].size();
         cudaMalloc((void**)(&(gpuData[i].d_seqsSize)), sizeof(int)*gpuData[i].totalWorkload);
@@ -347,11 +343,7 @@ void multi_gpu_msa(int gpuWorkload, string centerSeq, vector<string> seqs, int m
     // 每个GPU并行计算任务
     for(int i = 0; i < GPU_NUM; i++) {
         cudaSetDevice(i);
-        int offset = i * workload;
-        if(i != GPU_NUM - 1)
-            cuda_msa(offset, gpuData[i], centerSeq, maxLength, space, spaceForOther);
-        else                                // 最后一块GPU还要做多做余数
-            cuda_msa(offset, gpuData[i], centerSeq, maxLength, space, spaceForOther);
+        cuda_msa(i*workload, gpuData[i], centerSeq, maxLength, space, spaceForOther);
     }
 
 
@@ -359,13 +351,14 @@ void multi_gpu_msa(int gpuWorkload, string centerSeq, vector<string> seqs, int m
     for(int i = 0; i < GPU_NUM; i++) {
         cudaSetDevice(i);
         cudaStreamSynchronize(gpuData[i].stream);
-        delete[] gpuData[i].h_seqs;
-        delete[] gpuData[i].h_seqsSize;
+        cudaFreeHost(gpuData[i].h_seqs);
+        cudaFreeHost(gpuData[i].h_seqsSize);
         cudaFree(gpuData[i].d_centerSeq);
         cudaFree(gpuData[i].d_seqs);
         cudaFree(gpuData[i].d_seqsSize);
+        cudaFree(gpuData[i].d_space);
+        cudaFree(gpuData[i].d_spaceForOther);
+        cudaFree(gpuData[i].matrix3DPtr.ptr);
         cudaStreamDestroy(gpuData[i].stream);
     }
-
-    cudaDeviceReset();
 }

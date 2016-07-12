@@ -217,8 +217,12 @@ int main(int argc, char *argv[]) {
     init( inputPath );
 
     // Host端的纪录空格的数组
-    short *space = new short[seqs.size() * (centerSeq.size() + 1)];
-    short *spaceForOther = new short[seqs.size() * (maxLength + 1)];
+    // 为是计算和数据传输可以重叠，需要使用Pinned Memory
+    short *space, *spaceForOther;
+    cudaMallocHost((void**)(&space), (seqs.size()*(centerSeq.size()+1)*sizeof(short)));
+    cudaMallocHost((void**)(&spaceForOther), (seqs.size()*(maxLength+1)*sizeof(short)));
+    //short *space = new short[seqs.size() * (centerSeq.size() + 1)];
+    //short *spaceForOther = new short[seqs.size() * (maxLength + 1)];
 
 
     // 根据用户需要运行的模式来分配工作量
@@ -234,8 +238,10 @@ int main(int argc, char *argv[]) {
     // 输出结果
     output(space, spaceForOther, outputPath);
 
-    delete[] space;
-    delete[] spaceForOther;
+    cudaFreeHost(space);
+    cudaFreeHost(spaceForOther);
+    //delete[] space;
+    //delete[] spaceForOther;
 
     double end = omp_get_wtime();
     printf("total time: %f\n", end-start);

@@ -10,14 +10,19 @@ typedef struct DPCell_t {
 } DPCell;
 
 typedef struct GPUData_t {
-    int totalWorkload;      // 此设备所需要计算的总量
-    char *d_centerSeq;      // 中心串
+    int totalWorkload;              // 此设备所需要计算的总量
+    char *d_centerSeq;              // 中心串
 
     char *h_seqs;
     int *h_seqsSize;
 
-    char *d_seqs;           // 要处理的串
-    int *d_seqsSize;        // 要出列的串的长度
+    char *d_seqs;                   // 要处理的串
+    int *d_seqsSize;                // 要出列的串的长度
+
+
+    short *d_space;                 // 中心串的空格信息
+    short *d_spaceForOther;         // 其他串的空格信息
+    cudaPitchedPtr matrix3DPtr;     // 3D DP Matrix
 
     cudaStream_t stream;
 } GPUData;
