@@ -26,6 +26,10 @@ extern int THREADS;
 // 任务分配的比例, GPU/CPU
 extern double WORKLOAD_RATIO;
 
+// 使用GPU的数量, 默认为0
+// 由程序获取GPU数量，若初始值不为0说明用户自己指定
+extern int GPU_NUM;
+
 // 运行方式
 #define GPU_ONLY 1      // 只使用GPU
 #define CPU_ONLY 2      // 只使用CPU

@@ -296,9 +296,13 @@ void cuda_msa(int offset, GPUData data, string centerSeq, int maxLength, short *
 void multi_gpu_msa(int gpuWorkload, string centerSeq, vector<string> seqs, int maxLength, short *space, short *spaceForOther) {
     if(gpuWorkload <= 0) return;
 
-    int GPU_NUM;
-    cudaGetDeviceCount(&GPU_NUM);
-    //GPU_NUM = 1;
+    if(GPU_NUM==0)
+        cudaGetDeviceCount(&GPU_NUM);       // 如果用户没设置GPU数量则由程序自动读取
+    if(GPU_NUM==0) {
+        printf("No CUDA capable devices available.");
+        return;
+    }
+
 
     int workload = gpuWorkload / GPU_NUM;
 
@@ -338,7 +342,6 @@ void multi_gpu_msa(int gpuWorkload, string centerSeq, vector<string> seqs, int m
             gpuData[i].h_seqsSize[k] = seqs[k+offset].size();
         cudaMalloc((void**)(&(gpuData[i].d_seqsSize)), sizeof(int)*gpuData[i].totalWorkload);
     }
-
 
     // 每个GPU并行计算任务
     for(int i = 0; i < GPU_NUM; i++) {
