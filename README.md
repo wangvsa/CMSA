@@ -1,5 +1,5 @@
-# CUDA-MSA
-This paper presents CMSA, a robust and efficient MSA system for large-scale datasets on the heterogeneous CPU/GPU platform. It performs and optimizes multiple sequence alignment automatically for users’ submitted sequences without any assumptions. CMSA adopts the co-run computation model so that both CPU and GPU devices are fully utilized. Moreover, CMSA proposes an improved center star strategy that reduces the time complexity of its center sequence selection process from $O(mn^2)$ to O(mn). 
+# CMSA
+CMSA is a robust and efficient MSA system for large-scale datasets on the heterogeneous CPU/GPU platform. It performs and optimizes multiple sequence alignment automatically for users’ submitted sequences without any assumptions. CMSA adopts the co-run computation model so that both CPU and GPU devices are fully utilized. Moreover, CMSA proposes an improved center star strategy that reduces the time complexity of its center sequence selection process from O(mn^2) to O(mn).
 
 Usage:
 
