@@ -7,6 +7,7 @@
 #include "global.h"
 using namespace std;
 
+
 #define get_tid (threadIdx.x+blockIdx.x*blockDim.x)
 
 /**
@@ -117,15 +118,15 @@ void cuda_nw_3d(int m, int n, char *centerSeq, char *seq, cudaPitchedPtr matrix3
                 DPCell *matrixRow = (DPCell *)(slice + (i+k) * matrix3DPtr.pitch);
                 DPCell *matrixLastRow = (DPCell *)(slice + (i-1+k) * matrix3DPtr.pitch);
 
-                DPCell cell;            // 当前计算的cell
                 if(k==0) {
                     upScore = matrixLastRow[j].score;
                     upYGap = matrixLastRow[j].y_gap;
                     diagScore = matrixLastRow[j-1].score;
                 }
+                DPCell cell;            // 当前计算的cell
 
-                cell.x_gap = max(GAP_START+GAP_EXTEND+leftScore[k], GAP_EXTEND+leftXGap[k]);
-                cell.y_gap = max(GAP_START+GAP_EXTEND+upScore, GAP_EXTEND+upYGap);
+                cell.x_gap = max(GAP_SE+leftScore[k], GAP_EXTEND+leftXGap[k]);
+                cell.y_gap = max(GAP_SE+upScore, GAP_EXTEND+upYGap);
                 cell.score = diagScore + ((centerSeq[i+k-1]==seq[j-1])?MATCH:MISMATCH);               // matrix[i-1][j-1]
                 cell.score = max(cell.x_gap, cell.y_gap, cell.score);
 
@@ -225,7 +226,7 @@ void kernel(char *centerSeq, char *seqs, int centerSeqLength, int *seqsSize, cud
 
     // 计算使用的DP矩阵
     cuda_nw_3d(m, n, centerSeq, seq, matrix3DPtr);
-    cuda_backtrack_3d(m, n,centerSeq, seq, matrix3DPtr, spaceRow, spaceForOtherRow);
+    cuda_backtrack_3d(m, n, centerSeq, seq, matrix3DPtr, spaceRow, spaceForOtherRow);
 
     //printMatrix(spaceForOtherRow, 1, n+1);
 }
@@ -356,12 +357,14 @@ void multi_gpu_msa(int gpuWorkload, string centerSeq, vector<string> seqs, int m
         cudaStreamSynchronize(gpuData[i].stream);
         cudaFreeHost(gpuData[i].h_seqs);
         cudaFreeHost(gpuData[i].h_seqsSize);
+        /*
         cudaFree(gpuData[i].d_centerSeq);
         cudaFree(gpuData[i].d_seqs);
         cudaFree(gpuData[i].d_seqsSize);
         cudaFree(gpuData[i].d_space);
         cudaFree(gpuData[i].d_spaceForOther);
         cudaFree(gpuData[i].matrix3DPtr.ptr);
+        */
         cudaStreamDestroy(gpuData[i].stream);
     }
 }
